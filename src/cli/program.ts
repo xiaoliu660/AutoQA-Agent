@@ -1,13 +1,17 @@
 import { Command } from 'commander'
 
-import { registerInitCommand } from './commands/init.js'
+import { registerInitCommand, type InitCommandDeps } from './commands/init.js'
 
-export function createProgram() {
+export type CreateProgramOptions = {
+  initCommandDeps?: InitCommandDeps
+}
+
+export function createProgram(options: CreateProgramOptions = {}) {
   const program = new Command()
 
   program.name('autoqa').description('AutoQA Agent CLI')
 
-  registerInitCommand(program)
+  registerInitCommand(program, options.initCommandDeps)
 
   return program
 }

@@ -9,6 +9,7 @@ import {
   writeDefaultConfigFile,
 } from '../../config/init.js'
 import { ensureExampleSpecs } from '../../specs/init.js'
+import { probeAgentSdkAuth, type AgentSdkAuthProbeResult } from '../../auth/probe.js'
 
 function isUserCorrectableFsError(err: any): boolean {
   const code = err?.code
@@ -16,13 +17,47 @@ function isUserCorrectableFsError(err: any): boolean {
   return ['EACCES', 'EPERM', 'EROFS', 'ENOTDIR', 'EISDIR', 'ENOENT', 'EEXIST'].includes(code)
 }
 
-export function registerInitCommand(program: Command) {
+function isAuthenticationFailed(code: unknown): boolean {
+  return code === 'AUTHENTICATION_FAILED' || code === 'authentication_failed'
+}
+
+function getErrorCode(err: unknown): unknown {
+  if (!err || typeof err !== 'object') return undefined
+
+  const anyErr = err as any
+
+  return (
+    anyErr.code ??
+    anyErr.error?.code ??
+    anyErr.error?.type ??
+    anyErr.cause?.code ??
+    anyErr.cause?.error?.code
+  )
+}
+
+function hasAnthropicApiKey(): boolean {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  return typeof apiKey === 'string' && apiKey.length > 0
+}
+
+function writeOutLine(program: Command, message: string): void {
+  const output = program.configureOutput()
+  output.writeOut?.(`${message}\n`)
+}
+
+export type InitCommandDeps = {
+  probeAgentSdkAuth?: () => Promise<AgentSdkAuthProbeResult>
+}
+
+export function registerInitCommand(program: Command, deps: InitCommandDeps = {}) {
+  const probeAuth = deps.probeAgentSdkAuth ?? probeAgentSdkAuth
+
   program
     .command('init')
     .description(
       `Generate default ${AUTOQA_CONFIG_FILE_NAME} and example specs in current directory`,
     )
-    .action(() => {
+    .action(async () => {
       const cwd = process.cwd()
       const configPath = join(cwd, AUTOQA_CONFIG_FILE_NAME)
       let didWriteConfig = false
@@ -82,12 +117,34 @@ export function registerInitCommand(program: Command) {
         return
       }
 
-      console.log(`Created ${AUTOQA_CONFIG_FILE_NAME}`)
+      writeOutLine(program, `Created ${AUTOQA_CONFIG_FILE_NAME}`)
 
       if (didWriteExample) {
-        console.log('Created specs/login-example.md')
+        writeOutLine(program, 'Created specs/login-example.md')
       } else {
-        console.log('specs/login-example.md already exists. Skipping.')
+        writeOutLine(program, 'specs/login-example.md already exists. Skipping.')
+      }
+
+      let probeResult: AgentSdkAuthProbeResult
+      try {
+        probeResult = await probeAuth()
+      } catch (err: unknown) {
+        const code = getErrorCode(err)
+        probeResult = isAuthenticationFailed(code)
+          ? { kind: 'authentication_failed' }
+          : { kind: 'unknown' }
+      }
+
+      if (probeResult.kind === 'available') {
+        writeOutLine(program, '检测到 Claude Code 已授权（Agent SDK 可直接使用）。无需配置 ANTHROPIC_API_KEY。')
+      } else if (probeResult.kind === 'authentication_failed') {
+        if (hasAnthropicApiKey()) {
+          writeOutLine(program, '未检测到 Claude Code 授权。已检测到 ANTHROPIC_API_KEY，将在后续运行时使用该 Key。')
+        } else {
+          writeOutLine(program, '未检测到 Claude Code 授权。需要设置 ANTHROPIC_API_KEY。')
+        }
+      } else {
+        writeOutLine(program, '无法确认 Claude Code 授权状态，将在后续运行时再次校验。')
       }
     })
 }

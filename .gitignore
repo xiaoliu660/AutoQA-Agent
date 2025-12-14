@@ -4,3 +4,4 @@ node_modules/
 .gemini
 .DS_Store
 autoqa.config.json
+specs/
