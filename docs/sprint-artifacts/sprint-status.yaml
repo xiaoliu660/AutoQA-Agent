@@ -53,7 +53,7 @@ development_status:
   2-2-headless-debug-url-validation: done
   2-3-parse-markdown-spec-preconditions-steps-assertions: done
   2-4-runner-spec-lifecycle-browser-context-page: done
-  2-5-playwright-action-tools-toolresult: backlog
+  2-5-playwright-action-tools-toolresult: done
   2-6-pre-action-screenshot-inject-turn-compress: backlog
   2-7-logging-observability-structured: backlog
   epic-2-retrospective: optional
