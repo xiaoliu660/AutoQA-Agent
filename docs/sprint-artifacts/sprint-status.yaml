@@ -57,7 +57,7 @@ development_status:
   2-6-pre-action-screenshot-inject-turn-compress: done
   2-7-logging-observability-structured: done
   2-8-ax-aria-snapshot: done
-  2-9-playwright-trace-recording-retention: backlog
+  2-9-playwright-trace-recording-retention: done
   epic-2-retrospective: optional
 
   epic-3: backlog

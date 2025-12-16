@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from 'vitest'
 import type { MarkdownSpec } from '../../src/markdown/spec-types.js'
 import type { Logger } from '../../src/logging/index.js'
 
+const logMock = vi.fn()
 const mockLogger: Logger = {
-  log: vi.fn(),
+  log: logMock as any,
   flush: vi.fn(async () => {}),
 }
 
@@ -16,6 +17,7 @@ const dummySpec: MarkdownSpec = {
 describe('runner/runSpecs (browser/context/page lifecycle)', () => {
   it('creates a single Browser per run and a new Context/Page per spec (and closes them)', async () => {
     vi.resetModules()
+    logMock.mockClear()
 
     const pages: Array<{ close: ReturnType<typeof vi.fn> }> = []
     const contexts: Array<{ close: ReturnType<typeof vi.fn> }> = []
@@ -56,6 +58,7 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
         { specPath: '/specs/b.md', spec: dummySpec },
       ],
       logger: mockLogger,
+      cwd: '/tmp/test-cwd',
       onSpec,
     })
 
@@ -92,6 +95,7 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
 
   it('still closes Context and Browser when a spec fails', async () => {
     vi.resetModules()
+    logMock.mockClear()
 
     const pageClose = vi.fn(async () => {})
     const ctxClose = vi.fn(async () => {})
@@ -126,6 +130,7 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
       debug: false,
       specs: [{ specPath: '/specs/fail.md', spec: dummySpec }],
       logger: mockLogger,
+      cwd: '/tmp/test-cwd',
       onSpec,
     })
 
@@ -141,6 +146,7 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
 
   it('passes slowMo when debug=true', async () => {
     vi.resetModules()
+    logMock.mockClear()
 
     const browser = {
       version: vi.fn(() => 'chromium-mock'),
@@ -166,6 +172,7 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
       debug: true,
       specs: [{ specPath: '/specs/a.md', spec: dummySpec }],
       logger: mockLogger,
+      cwd: '/tmp/test-cwd',
       onSpec: vi.fn(async () => {}),
     })
 
@@ -174,5 +181,266 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
     expect(createBrowserMock.mock.calls[0]?.[0]).toMatchObject({
       slowMo: 75,
     })
+  })
+})
+
+describe('runner/runSpecs (trace recording)', () => {
+  it('calls tracing.start once per spec and tracing.stop before context close', async () => {
+    vi.resetModules()
+    logMock.mockClear()
+
+    const tracingStart = vi.fn(async () => {})
+    const tracingStop = vi.fn(async () => {})
+    const pageClose = vi.fn(async () => {})
+    const ctxClose = vi.fn(async () => {})
+
+    const context = {
+      tracing: {
+        start: tracingStart,
+        stop: tracingStop,
+      },
+      newPage: vi.fn(async () => ({ close: pageClose })),
+      close: ctxClose,
+    }
+
+    const browser = {
+      version: vi.fn(() => 'chromium-mock'),
+      newContext: vi.fn(async () => context),
+      close: vi.fn(async () => {}),
+    }
+
+    vi.doMock('../../src/browser/create-browser.js', () => ({
+      createBrowser: vi.fn(async () => browser),
+    }))
+
+    vi.doMock('../../src/runner/trace-paths.js', () => ({
+      generateTraceName: vi.fn((idx: number, specPath: string) => `${idx}-spec`),
+      getTracePath: vi.fn((cwd: string, runId: string, name: string) => `/tmp/${runId}/traces/${name}.zip`),
+      getRelativeTracePath: vi.fn((cwd: string, runId: string, name: string) => `.autoqa/runs/${runId}/traces/${name}.zip`),
+      ensureTraceDir: vi.fn(async () => {}),
+    }))
+
+    const { runSpecs } = await import('../../src/runner/run-specs.js')
+
+    const result = await runSpecs({
+      runId: 'run-trace-1',
+      baseUrl: 'http://example.test',
+      headless: true,
+      debug: false,
+      specs: [
+        { specPath: '/specs/a.md', spec: dummySpec },
+        { specPath: '/specs/b.md', spec: dummySpec },
+      ],
+      logger: mockLogger,
+      cwd: '/tmp/test-cwd',
+      onSpec: vi.fn(async () => {}),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(tracingStart).toHaveBeenCalledTimes(2)
+    expect(tracingStop).toHaveBeenCalledTimes(2)
+
+    expect(tracingStart).toHaveBeenCalledWith({ screenshots: true, snapshots: true, sources: true })
+
+    if (result.ok) {
+      expect(result.traces).toHaveLength(2)
+      expect(result.traces[0]?.tracePath).toMatch(/\.autoqa\/runs\/run-trace-1\/traces\/.*\.zip$/)
+    }
+  })
+
+  it('does not fail spec when tracing.start throws', async () => {
+    vi.resetModules()
+    logMock.mockClear()
+
+    const tracingStart = vi.fn(async () => {
+      throw new Error('tracing start failed')
+    })
+    const tracingStop = vi.fn(async () => {})
+    const pageClose = vi.fn(async () => {})
+    const ctxClose = vi.fn(async () => {})
+
+    const context = {
+      tracing: {
+        start: tracingStart,
+        stop: tracingStop,
+      },
+      newPage: vi.fn(async () => ({ close: pageClose })),
+      close: ctxClose,
+    }
+
+    const browser = {
+      version: vi.fn(() => 'chromium-mock'),
+      newContext: vi.fn(async () => context),
+      close: vi.fn(async () => {}),
+    }
+
+    vi.doMock('../../src/browser/create-browser.js', () => ({
+      createBrowser: vi.fn(async () => browser),
+    }))
+
+    vi.doMock('../../src/runner/trace-paths.js', () => ({
+      generateTraceName: vi.fn((idx: number) => `${idx}-spec`),
+      getTracePath: vi.fn((cwd: string, runId: string, name: string) => `/tmp/${runId}/traces/${name}.zip`),
+      getRelativeTracePath: vi.fn((cwd: string, runId: string, name: string) => `.autoqa/runs/${runId}/traces/${name}.zip`),
+      ensureTraceDir: vi.fn(async () => {}),
+    }))
+
+    const { runSpecs } = await import('../../src/runner/run-specs.js')
+
+    const result = await runSpecs({
+      runId: 'run-trace-2',
+      baseUrl: 'http://example.test',
+      headless: true,
+      debug: false,
+      specs: [{ specPath: '/specs/a.md', spec: dummySpec }],
+      logger: mockLogger,
+      cwd: '/tmp/test-cwd',
+      onSpec: vi.fn(async () => {}),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(tracingStart).toHaveBeenCalledTimes(1)
+    expect(tracingStop).not.toHaveBeenCalled()
+    expect(pageClose).toHaveBeenCalledTimes(1)
+    expect(ctxClose).toHaveBeenCalledTimes(1)
+
+    const finishedEvents = (logMock as any).mock.calls
+      .map((c: any[]) => c[0])
+      .filter((e: any) => e?.event === 'autoqa.spec.finished')
+    expect(finishedEvents).toHaveLength(1)
+    expect(finishedEvents[0]).not.toHaveProperty('tracePath')
+  })
+
+  it('does not fail spec when tracing.stop throws', async () => {
+    vi.resetModules()
+    logMock.mockClear()
+
+    const tracingStart = vi.fn(async () => {})
+    const tracingStop = vi.fn(async () => {
+      const err = new Error('open /Users/alice/project/.autoqa/runs/run-trace-3/traces/000-spec.zip')
+      ;(err as any).code = 'EACCES'
+      throw err
+    })
+    const pageClose = vi.fn(async () => {})
+    const ctxClose = vi.fn(async () => {})
+
+    const context = {
+      tracing: {
+        start: tracingStart,
+        stop: tracingStop,
+      },
+      newPage: vi.fn(async () => ({ close: pageClose })),
+      close: ctxClose,
+    }
+
+    const browser = {
+      version: vi.fn(() => 'chromium-mock'),
+      newContext: vi.fn(async () => context),
+      close: vi.fn(async () => {}),
+    }
+
+    vi.doMock('../../src/browser/create-browser.js', () => ({
+      createBrowser: vi.fn(async () => browser),
+    }))
+
+    vi.doMock('../../src/runner/trace-paths.js', () => ({
+      generateTraceName: vi.fn((idx: number) => `${idx}-spec`),
+      getTracePath: vi.fn((cwd: string, runId: string, name: string) => `/tmp/${runId}/traces/${name}.zip`),
+      getRelativeTracePath: vi.fn((cwd: string, runId: string, name: string) => `.autoqa/runs/${runId}/traces/${name}.zip`),
+      ensureTraceDir: vi.fn(async () => {}),
+    }))
+
+    const { runSpecs } = await import('../../src/runner/run-specs.js')
+
+    const result = await runSpecs({
+      runId: 'run-trace-3',
+      baseUrl: 'http://example.test',
+      headless: true,
+      debug: false,
+      specs: [{ specPath: '/specs/a.md', spec: dummySpec }],
+      logger: mockLogger,
+      cwd: '/tmp/test-cwd',
+      onSpec: vi.fn(async () => {}),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(tracingStart).toHaveBeenCalledTimes(1)
+    expect(tracingStop).toHaveBeenCalledTimes(1)
+    expect(pageClose).toHaveBeenCalledTimes(1)
+    expect(ctxClose).toHaveBeenCalledTimes(1)
+
+    if (result.ok) {
+      expect(result.traces).toHaveLength(0)
+    }
+
+    const finishedEvents = (logMock as any).mock.calls
+      .map((c: any[]) => c[0])
+      .filter((e: any) => e?.event === 'autoqa.spec.finished')
+    expect(finishedEvents).toHaveLength(1)
+    expect(finishedEvents[0]?.tracingError).toBe('TRACING_STOP_FAILED (EACCES)')
+    expect(String(finishedEvents[0]?.tracingError ?? '')).not.toContain('/Users/')
+    expect(finishedEvents[0]).not.toHaveProperty('tracePath')
+  })
+
+  it('still calls tracing.stop in finally when spec fails', async () => {
+    vi.resetModules()
+    logMock.mockClear()
+
+    const tracingStart = vi.fn(async () => {})
+    const tracingStop = vi.fn(async () => {})
+    const pageClose = vi.fn(async () => {})
+    const ctxClose = vi.fn(async () => {})
+
+    const context = {
+      tracing: {
+        start: tracingStart,
+        stop: tracingStop,
+      },
+      newPage: vi.fn(async () => ({ close: pageClose })),
+      close: ctxClose,
+    }
+
+    const browser = {
+      version: vi.fn(() => 'chromium-mock'),
+      newContext: vi.fn(async () => context),
+      close: vi.fn(async () => {}),
+    }
+
+    vi.doMock('../../src/browser/create-browser.js', () => ({
+      createBrowser: vi.fn(async () => browser),
+    }))
+
+    vi.doMock('../../src/runner/trace-paths.js', () => ({
+      generateTraceName: vi.fn((idx: number) => `${idx}-spec`),
+      getTracePath: vi.fn((cwd: string, runId: string, name: string) => `/tmp/${runId}/traces/${name}.zip`),
+      getRelativeTracePath: vi.fn((cwd: string, runId: string, name: string) => `.autoqa/runs/${runId}/traces/${name}.zip`),
+      ensureTraceDir: vi.fn(async () => {}),
+    }))
+
+    const { runSpecs } = await import('../../src/runner/run-specs.js')
+
+    const result = await runSpecs({
+      runId: 'run-trace-4',
+      baseUrl: 'http://example.test',
+      headless: true,
+      debug: false,
+      specs: [{ specPath: '/specs/fail.md', spec: dummySpec }],
+      logger: mockLogger,
+      cwd: '/tmp/test-cwd',
+      onSpec: vi.fn(async () => {
+        throw new Error('spec failed')
+      }),
+    })
+
+    expect(result.ok).toBe(false)
+    expect(tracingStart).toHaveBeenCalledTimes(1)
+    expect(tracingStop).toHaveBeenCalledTimes(1)
+    expect(pageClose).toHaveBeenCalledTimes(1)
+    expect(ctxClose).toHaveBeenCalledTimes(1)
+
+    const finishedEvents = (logMock as any).mock.calls
+      .map((c: any[]) => c[0])
+      .filter((e: any) => e?.event === 'autoqa.spec.finished')
+    expect(finishedEvents).toHaveLength(1)
   })
 })

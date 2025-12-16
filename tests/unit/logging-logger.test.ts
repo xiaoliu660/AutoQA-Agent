@@ -6,6 +6,19 @@ import { randomUUID } from 'node:crypto'
 
 import { createLogger, getArtifactRootPath, ensureArtifactDir } from '../../src/logging/logger.js'
 
+async function readFileWithRetry(path: string, attempts = 25): Promise<string> {
+  let lastErr: unknown
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await readFile(path, 'utf8')
+    } catch (err: unknown) {
+      lastErr = err
+      await new Promise<void>((resolve) => setTimeout(resolve, 5))
+    }
+  }
+  throw lastErr
+}
+
 describe('getArtifactRootPath', () => {
   it('returns correct artifact root path', () => {
     const result = getArtifactRootPath('/home/user/project', 'abc-123')
@@ -75,7 +88,7 @@ describe('createLogger', () => {
     await logger.flush()
 
     const logPath = resolve(testDir, '.autoqa', 'runs', runId, 'run.log.jsonl')
-    const content = await readFile(logPath, 'utf8')
+    const content = await readFileWithRetry(logPath)
     const lines = content.trim().split('\n')
 
     expect(lines.length).toBe(1)
@@ -117,7 +130,7 @@ describe('createLogger', () => {
     await logger.flush()
 
     const logPath = resolve(testDir, '.autoqa', 'runs', runId, 'run.log.jsonl')
-    const content = await readFile(logPath, 'utf8')
+    const content = await readFileWithRetry(logPath)
     const lines = content.trim().split('\n')
 
     expect(lines.length).toBe(3)
@@ -164,7 +177,7 @@ describe('createLogger', () => {
     await logger.flush()
 
     const logPath = resolve(testDir, '.autoqa', 'runs', runId, 'run.log.jsonl')
-    const content = await readFile(logPath, 'utf8')
+    const content = await readFileWithRetry(logPath)
     const lines = content.trim().split('\n')
 
     expect(lines.length).toBe(2)
@@ -206,7 +219,7 @@ describe('createLogger', () => {
     await logger.flush()
 
     const logPath = resolve(testDir, '.autoqa', 'runs', runId, 'run.log.jsonl')
-    const content = await readFile(logPath, 'utf8')
+    const content = await readFileWithRetry(logPath)
     const parsed = JSON.parse(content.trim())
 
     expect(parsed.ok).toBe(false)
@@ -231,7 +244,7 @@ describe('createLogger', () => {
     await logger.flush()
 
     const logPath = resolve(testDir, '.autoqa', 'runs', runId, 'run.log.jsonl')
-    const content = await readFile(logPath, 'utf8')
+    const content = await readFileWithRetry(logPath)
     const parsed = JSON.parse(content.trim())
 
     expect(parsed.event).toBe('autoqa.run.finished')

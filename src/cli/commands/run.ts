@@ -180,6 +180,7 @@ export function registerRunCommand(program: Command) {
         debug: validated.value.debug,
         specs: parsedSpecs,
         logger,
+        cwd,
         onSpec: async ({ runId, baseUrl, specPath, spec, page, logger }) => {
           await runAgent({
             runId,
@@ -198,6 +199,12 @@ export function registerRunCommand(program: Command) {
         const exitCode = runResult.code === 'SPEC_EXECUTION_FAILED' ? 1 : 2
 
         writeOutLine(writeErr, `snapshotDir=${artifactRoot}/snapshots`)
+        writeOutLine(writeErr, `traceDir=${artifactRoot}/traces`)
+        if (runResult.traces && runResult.traces.length > 0) {
+          for (const trace of runResult.traces) {
+            writeOutLine(writeErr, `tracePath=${trace.tracePath}`)
+          }
+        }
 
         logger.log({
           event: 'autoqa.run.finished',
@@ -220,6 +227,13 @@ export function registerRunCommand(program: Command) {
 
       if (validated.value.debug && runResult.chromiumVersion) {
         writeOutLine(writeErr, `chromiumVersion=${runResult.chromiumVersion}`)
+      }
+
+      writeOutLine(writeErr, `traceDir=${artifactRoot}/traces`)
+      if (runResult.traces && runResult.traces.length > 0) {
+        for (const trace of runResult.traces) {
+          writeOutLine(writeErr, `tracePath=${trace.tracePath}`)
+        }
       }
 
       logger.log({

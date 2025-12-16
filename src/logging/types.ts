@@ -32,6 +32,8 @@ export type SpecFinishedEvent = LogEventBase & {
   durationMs: number
   ok: boolean
   failureReason?: string
+  tracePath?: string
+  tracingError?: string
 }
 
 export type ToolCalledEvent = LogEventBase & {
