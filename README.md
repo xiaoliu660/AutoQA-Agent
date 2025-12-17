@@ -98,9 +98,12 @@ flowchart TD
     D --> E["Playwright 引擎<br/>实际浏览器操作"]
     E --> F["执行结果<br/>截图/日志/Trace"]
 
-    style A fill:#e1f5fe
-    style C fill:#f3e5f5
-    style E fill:#e8f5e8
+    style A fill:#e3f2fd,stroke:#2196f3,color:#0d47a1
+    style B fill:#f3e5f5,stroke:#9c27b0,color:#4a148c
+    style C fill:#e8eaf6,stroke:#3f51b5,color:#1a237e
+    style D fill:#fff3e0,stroke:#ff9800,color:#e65100
+    style E fill:#e8f5e9,stroke:#4caf50,color:#1b5e20
+    style F fill:#fce4ec,stroke:#e91e63,color:#880e4f
 ```
 
 ### 执行流程
