@@ -91,7 +91,34 @@ export type CreateBrowserToolsMcpServerOptions = {
   cwd?: string
   specPath: string
   logger: Logger
+  onToolCall?: (toolName: string, stepIndex: number | null, isError: boolean) => void
 }
+
+function parseStepIndex(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 1) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const s = value.trim()
+    if (!/^\d+$/.test(s)) return null
+    const parsed = parseInt(s, 10)
+    if (!Number.isNaN(parsed) && parsed >= 1) {
+      return parsed
+    }
+  }
+  return null
+}
+
+ const stepIndexSchema = z
+   .preprocess((value) => {
+     if (typeof value === 'string') {
+       const s = value.trim()
+       if (!/^\d+$/.test(s)) return value
+       return parseInt(s, 10)
+     }
+     return value
+   }, z.number().int().positive())
+   .optional()
 
 const DEFAULT_JPEG_QUALITY = 60
 
@@ -105,13 +132,13 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
   const { logger, specPath } = options
   const cwd = options.cwd ?? process.cwd()
 
-  function logToolCall(toolName: string, toolInput: Record<string, unknown>): void {
+  function logToolCall(toolName: string, toolInput: Record<string, unknown>, stepIndex: number | null): void {
     logger.log({
       event: 'autoqa.tool.called',
       runId: options.runId,
       specPath,
       toolName,
-      stepIndex: null,
+      stepIndex,
       toolInput: redactToolInput(toolName, toolInput),
     })
   }
@@ -120,18 +147,23 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
     toolName: string,
     startTime: number,
     result: { ok: boolean; error?: any },
+    stepIndex: number | null,
     meta: {
       error?: string
       screenshot?: { mimeType?: string; width?: number; height?: number; path?: string }
       snapshot?: SnapshotMeta
     },
   ): void {
+    if (options.onToolCall) {
+      options.onToolCall(toolName, stepIndex, !result.ok)
+    }
+
     const event: any = {
       event: 'autoqa.tool.result',
       runId: options.runId,
       specPath,
       toolName,
-      stepIndex: null,
+      stepIndex,
       toolDurationMs: Date.now() - startTime,
       ok: result.ok,
     }
@@ -198,12 +230,15 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
       tool(
         'snapshot',
         'Capture an accessibility snapshot that includes stable refs for interactable elements.',
-        {},
-        async () => {
+        {
+          stepIndex: stepIndexSchema,
+        },
+        async (args) => {
+          const stepIndex = parseStepIndex((args as any).stepIndex)
           const fileBaseName = nextFileBaseName('snapshot')
           const startTime = Date.now()
-          logToolCall('snapshot', {})
-          writeDebug(options.debug, 'mcp_tool=snapshot')
+          logToolCall('snapshot', {}, stepIndex)
+          writeDebug(options.debug, `mcp_tool=snapshot stepIndex=${stepIndex}`)
 
           const snapshotCapture = await capturePreActionSnapshot()
 
@@ -213,7 +248,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             shouldWriteArtifacts(options.debug, true),
           )
 
-          logToolResult('snapshot', startTime, { ok: true } as any, { snapshot: snapshotMeta })
+          logToolResult('snapshot', startTime, { ok: true } as any, stepIndex, { snapshot: snapshotMeta })
 
           const content: ContentBlock[] = []
           if (snapshotMeta.error) content.push({ type: 'text', text: `SNAPSHOT_FAILED: ${snapshotMeta.error}` })
@@ -231,14 +266,16 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
         'Navigate the page to a given URL (absolute or /path relative to baseUrl). Captures a pre-action screenshot and returns it as an image block.',
         {
           url: z.string(),
+          stepIndex: stepIndexSchema,
         },
         async (args) => {
+          const stepIndex = parseStepIndex((args as any).stepIndex)
           const contextMode = getToolContextMode()
           const url = normalizeToolStringInput(args.url)
           const fileBaseName = nextFileBaseName('navigate')
           const startTime = Date.now()
-          logToolCall('navigate', { url })
-          writeDebug(options.debug, `mcp_tool=navigate url=${url}`)
+          logToolCall('navigate', { url }, stepIndex)
+          writeDebug(options.debug, `mcp_tool=navigate url=${url} stepIndex=${stepIndex}`)
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
@@ -264,7 +301,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             )
             : ({ captured: false } as SnapshotMeta)
 
-          logToolResult('navigate', startTime, result as any, { ...meta, snapshot: snapshotMeta })
+          logToolResult('navigate', startTime, result as any, stepIndex, { ...meta, snapshot: snapshotMeta })
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
@@ -281,17 +318,19 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
         {
           targetDescription: z.string().optional(),
           ref: z.string().optional(),
+          stepIndex: stepIndexSchema,
         },
         async (args) => {
+          const stepIndex = parseStepIndex((args as any).stepIndex)
           const contextMode = getToolContextMode()
           const targetDescription = typeof (args as any).targetDescription === 'string' ? normalizeToolStringInput((args as any).targetDescription) : ''
           const ref = typeof (args as any).ref === 'string' ? normalizeToolStringInput((args as any).ref) : ''
           const fileBaseName = nextFileBaseName('click')
           const startTime = Date.now()
-          logToolCall('click', { targetDescription, ref })
+          logToolCall('click', { targetDescription, ref }, stepIndex)
           writeDebug(
             options.debug,
-            `mcp_tool=click targetLength=${targetDescription.length}${ref ? ` refLength=${ref.length}` : ''}`,
+            `mcp_tool=click targetLength=${targetDescription.length}${ref ? ` refLength=${ref.length}` : ''} stepIndex=${stepIndex}`,
           )
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
@@ -339,7 +378,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             )
             : ({ captured: false } as SnapshotMeta)
 
-          logToolResult('click', startTime, result as any, { ...meta, snapshot: snapshotMeta })
+          logToolResult('click', startTime, result as any, stepIndex, { ...meta, snapshot: snapshotMeta })
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
@@ -357,18 +396,20 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           targetDescription: z.string().optional(),
           ref: z.string().optional(),
           text: z.string(),
+          stepIndex: stepIndexSchema,
         },
         async (args) => {
+          const stepIndex = parseStepIndex((args as any).stepIndex)
           const contextMode = getToolContextMode()
           const targetDescription = typeof (args as any).targetDescription === 'string' ? normalizeToolStringInput((args as any).targetDescription) : ''
           const ref = typeof (args as any).ref === 'string' ? normalizeToolStringInput((args as any).ref) : ''
           const text = normalizeToolStringInput(args.text)
           const fileBaseName = nextFileBaseName('fill')
           const startTime = Date.now()
-          logToolCall('fill', { targetDescription, ref, text })
+          logToolCall('fill', { targetDescription, ref, text }, stepIndex)
           writeDebug(
             options.debug,
-            `mcp_tool=fill targetLength=${targetDescription.length}${ref ? ` refLength=${ref.length}` : ''} textLength=${text.length}`,
+            `mcp_tool=fill targetLength=${targetDescription.length}${ref ? ` refLength=${ref.length}` : ''} textLength=${text.length} stepIndex=${stepIndex}`,
           )
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
@@ -429,7 +470,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             )
             : ({ captured: false } as SnapshotMeta)
 
-          logToolResult('fill', startTime, result as any, { ...meta, snapshot: snapshotMeta })
+          logToolResult('fill', startTime, result as any, stepIndex, { ...meta, snapshot: snapshotMeta })
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
@@ -446,15 +487,17 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
         {
           ref: z.string(),
           label: z.string(),
+          stepIndex: stepIndexSchema,
         },
         async (args) => {
+          const stepIndex = parseStepIndex((args as any).stepIndex)
           const contextMode = getToolContextMode()
           const ref = normalizeToolStringInput(args.ref)
           const label = normalizeToolStringInput(args.label)
           const fileBaseName = nextFileBaseName('select_option')
           const startTime = Date.now()
-          logToolCall('select_option', { ref, label })
-          writeDebug(options.debug, `mcp_tool=select_option ref=${ref} label=${label}`)
+          logToolCall('select_option', { ref, label }, stepIndex)
+          writeDebug(options.debug, `mcp_tool=select_option ref=${ref} label=${label} stepIndex=${stepIndex}`)
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
@@ -498,7 +541,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             )
             : ({ captured: false } as SnapshotMeta)
 
-          logToolResult('select_option', startTime, result as any, { ...meta, snapshot: snapshotMeta })
+          logToolResult('select_option', startTime, result as any, stepIndex, { ...meta, snapshot: snapshotMeta })
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
@@ -515,13 +558,15 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
         {
           direction: z.enum(['up', 'down']),
           amount: z.number(),
+          stepIndex: stepIndexSchema,
         },
         async (args) => {
+          const stepIndex = parseStepIndex((args as any).stepIndex)
           const contextMode = getToolContextMode()
           const fileBaseName = nextFileBaseName('scroll')
           const startTime = Date.now()
-          logToolCall('scroll', { direction: args.direction, amount: args.amount })
-          writeDebug(options.debug, `mcp_tool=scroll direction=${args.direction} amount=${args.amount}`)
+          logToolCall('scroll', { direction: args.direction, amount: args.amount }, stepIndex)
+          writeDebug(options.debug, `mcp_tool=scroll direction=${args.direction} amount=${args.amount} stepIndex=${stepIndex}`)
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
@@ -547,7 +592,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             )
             : ({ captured: false } as SnapshotMeta)
 
-          logToolResult('scroll', startTime, result as any, { ...meta, snapshot: snapshotMeta })
+          logToolResult('scroll', startTime, result as any, stepIndex, { ...meta, snapshot: snapshotMeta })
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
@@ -563,13 +608,15 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
         'Wait for N seconds. Optional pre-action screenshot (kept for consistency).',
         {
           seconds: z.number(),
+          stepIndex: stepIndexSchema,
         },
         async (args) => {
+          const stepIndex = parseStepIndex((args as any).stepIndex)
           const contextMode = getToolContextMode()
           const fileBaseName = nextFileBaseName('wait')
           const startTime = Date.now()
-          logToolCall('wait', { seconds: args.seconds })
-          writeDebug(options.debug, `mcp_tool=wait seconds=${args.seconds}`)
+          logToolCall('wait', { seconds: args.seconds }, stepIndex)
+          writeDebug(options.debug, `mcp_tool=wait seconds=${args.seconds} stepIndex=${stepIndex}`)
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
@@ -595,7 +642,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             )
             : ({ captured: false } as SnapshotMeta)
 
-          logToolResult('wait', startTime, result as any, { ...meta, snapshot: snapshotMeta })
+          logToolResult('wait', startTime, result as any, stepIndex, { ...meta, snapshot: snapshotMeta })
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
@@ -611,14 +658,16 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
         'Assert that the page contains the specified text. Returns ok=true if found, ok=false with ASSERTION_FAILED if not found.',
         {
           text: z.string(),
+          stepIndex: stepIndexSchema,
         },
         async (args) => {
+          const stepIndex = parseStepIndex((args as any).stepIndex)
           const contextMode = getToolContextMode()
           const text = normalizeToolStringInput(args.text)
           const fileBaseName = nextFileBaseName('assertTextPresent')
           const startTime = Date.now()
-          logToolCall('assertTextPresent', { text })
-          writeDebug(options.debug, `mcp_tool=assertTextPresent textLength=${text.length}`)
+          logToolCall('assertTextPresent', { text }, stepIndex)
+          writeDebug(options.debug, `mcp_tool=assertTextPresent textLength=${text.length} stepIndex=${stepIndex}`)
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
@@ -644,7 +693,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             )
             : ({ captured: false } as SnapshotMeta)
 
-          logToolResult('assertTextPresent', startTime, result as any, { ...meta, snapshot: snapshotMeta })
+          logToolResult('assertTextPresent', startTime, result as any, stepIndex, { ...meta, snapshot: snapshotMeta })
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
@@ -661,17 +710,19 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
         {
           targetDescription: z.string().optional(),
           ref: z.string().optional(),
+          stepIndex: stepIndexSchema,
         },
         async (args) => {
+          const stepIndex = parseStepIndex((args as any).stepIndex)
           const contextMode = getToolContextMode()
           const targetDescription = typeof (args as any).targetDescription === 'string' ? normalizeToolStringInput((args as any).targetDescription) : ''
           const ref = typeof (args as any).ref === 'string' ? normalizeToolStringInput((args as any).ref) : ''
           const fileBaseName = nextFileBaseName('assertElementVisible')
           const startTime = Date.now()
-          logToolCall('assertElementVisible', { targetDescription, ref })
+          logToolCall('assertElementVisible', { targetDescription, ref }, stepIndex)
           writeDebug(
             options.debug,
-            `mcp_tool=assertElementVisible targetLength=${targetDescription.length}${ref ? ` refLength=${ref.length}` : ''}`,
+            `mcp_tool=assertElementVisible targetLength=${targetDescription.length}${ref ? ` refLength=${ref.length}` : ''} stepIndex=${stepIndex}`,
           )
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
@@ -741,7 +792,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             )
             : ({ captured: false } as SnapshotMeta)
 
-          logToolResult('assertElementVisible', startTime, result as any, { ...meta, snapshot: snapshotMeta })
+          logToolResult('assertElementVisible', startTime, result as any, stepIndex, { ...meta, snapshot: snapshotMeta })
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })

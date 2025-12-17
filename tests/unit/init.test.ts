@@ -30,7 +30,14 @@ describe('autoqa init', () => {
       const contents = readFileSync(configPath, 'utf8')
 
       expect(contents.endsWith('\n')).toBe(true)
-      expect(JSON.parse(contents)).toEqual({ schemaVersion: 1 })
+      expect(JSON.parse(contents)).toEqual({
+        schemaVersion: 1,
+        guardrails: {
+          maxToolCallsPerSpec: 200,
+          maxConsecutiveErrors: 8,
+          maxRetriesPerStep: 5,
+        },
+      })
     } finally {
       process.chdir(originalCwd)
       rmSync(tempDir, { recursive: true, force: true })
@@ -102,7 +109,14 @@ describe('autoqa init', () => {
       await program.parseAsync(['init'], { from: 'user' })
 
       const configPath = join(tempDir, 'autoqa.config.json')
-      expect(JSON.parse(readFileSync(configPath, 'utf8'))).toEqual({ schemaVersion: 1 })
+      expect(JSON.parse(readFileSync(configPath, 'utf8'))).toEqual({
+        schemaVersion: 1,
+        guardrails: {
+          maxToolCallsPerSpec: 200,
+          maxConsecutiveErrors: 8,
+          maxRetriesPerStep: 5,
+        },
+      })
       expect(readFileSync(exampleSpecPath, 'utf8')).toBe(customContents)
 
       expect(stdout).toContain('specs/login-example.md already exists. Skipping.')

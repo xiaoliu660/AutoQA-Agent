@@ -16,6 +16,7 @@ import type { MarkdownSpec } from '../../markdown/spec-types.js'
 import { runAgent } from '../../agent/run-agent.js'
 import { probeAgentSdkAuth, type AgentSdkAuthProbeResult } from '../../auth/probe.js'
 import { createLogger, ensureArtifactDir, getArtifactRootPath } from '../../logging/index.js'
+import { readConfig, resolveGuardrails } from '../../config/read.js'
 
 function sanitizeBaseUrlForLog(baseUrl: string): string {
   try {
@@ -54,6 +55,14 @@ export function registerRunCommand(program: Command) {
       }
 
       const inputPath = resolve(fileOrDir)
+
+      const configResult = readConfig()
+      if (!configResult.ok) {
+        program.error(configResult.error.message, { exitCode: 2 })
+        return
+      }
+
+      const guardrails = resolveGuardrails(configResult.config)
 
       const result = discoverMarkdownSpecs(inputPath)
 
@@ -191,6 +200,7 @@ export function registerRunCommand(program: Command) {
             page,
             cwd,
             logger,
+            guardrails,
           })
         },
       })

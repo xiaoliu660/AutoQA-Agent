@@ -70,6 +70,15 @@ export type ToolResultEvent = LogEventBase & {
   snapshotError?: string
 }
 
+export type GuardrailTriggeredEvent = LogEventBase & {
+  event: 'autoqa.guardrail.triggered'
+  specPath: string
+  stepIndex: number | null
+  code: string
+  limit: number
+  actual: number
+}
+
 export type LogEvent =
   | RunStartedEvent
   | RunFinishedEvent
@@ -77,3 +86,4 @@ export type LogEvent =
   | SpecFinishedEvent
   | ToolCalledEvent
   | ToolResultEvent
+  | GuardrailTriggeredEvent

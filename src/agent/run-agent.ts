@@ -5,6 +5,18 @@ import type { Page } from 'playwright'
 import type { MarkdownSpec } from '../markdown/spec-types.js'
 import { createBrowserToolsMcpServer } from './browser-tools-mcp.js'
 import type { Logger } from '../logging/index.js'
+import type { Guardrails } from '../config/schema.js'
+import { DEFAULT_GUARDRAILS } from '../config/defaults.js'
+import {
+  GuardrailError,
+  createGuardrailCounters,
+  checkGuardrails,
+  updateCountersOnToolCall,
+  updateCountersOnToolResult,
+  type GuardrailCounters,
+} from './guardrails.js'
+
+export { GuardrailError } from './guardrails.js'
 
 export type RunAgentOptions = {
   runId: string
@@ -15,6 +27,7 @@ export type RunAgentOptions = {
   page: Page
   cwd?: string
   logger: Logger
+  guardrails?: Required<Guardrails>
 }
 
 export const RUN_AGENT_ALLOWED_TOOLS = [
@@ -50,6 +63,7 @@ Rules:
 - The browser page starts at about:blank. Always call navigate('/') first to open the site.
 - Tool inputs MUST be plain strings (do not include Markdown backticks or quotes around values).
 - Keep tool inputs minimal and avoid leaking secrets.
+- Step tracking: For EVERY tool call, include the stepIndex parameter matching the current step number (1-indexed from the Steps list above). This is critical for tracking progress and error recovery.
 - Ref-first execution:
   - Before each interaction step (click/fill/select_option), call snapshot to get an accessibility snapshot.
   - Find the target element in the snapshot and extract its ref like [ref=e15].
@@ -76,6 +90,19 @@ function safeString(value: unknown): string {
 function truncate(value: string, max: number): string {
   if (value.length <= max) return value
   return `${value.slice(0, max)}…`
+}
+
+function parseStepIndex(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 1) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const s = value.trim()
+    if (!/^\d+$/.test(s)) return null
+    const parsed = parseInt(s, 10)
+    if (!Number.isNaN(parsed) && parsed >= 1) return parsed
+  }
+  return null
 }
 
 function getAssistantContent(message: any): unknown {
@@ -110,6 +137,15 @@ export async function runAgent(options: RunAgentOptions): Promise<void> {
   if (!process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT) {
     process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '60000'
   }
+
+  const guardrailLimits = {
+    maxToolCallsPerSpec: options.guardrails?.maxToolCallsPerSpec ?? DEFAULT_GUARDRAILS.maxToolCallsPerSpec,
+    maxConsecutiveErrors: options.guardrails?.maxConsecutiveErrors ?? DEFAULT_GUARDRAILS.maxConsecutiveErrors,
+    maxRetriesPerStep: options.guardrails?.maxRetriesPerStep ?? DEFAULT_GUARDRAILS.maxRetriesPerStep,
+  }
+
+  const counters: GuardrailCounters = createGuardrailCounters()
+  const toolUseStepIndex = new Map<string, number | null>()
 
   const server = createBrowserToolsMcpServer({
     page: options.page,
@@ -146,6 +182,18 @@ export async function runAgent(options: RunAgentOptions): Promise<void> {
       persistSession: false,
     },
   })
+
+  const tryAbortStream = async (): Promise<void> => {
+    const anyResponse = response as any
+    const fn = anyResponse?.return
+    if (typeof fn === 'function') {
+      try {
+        await fn.call(anyResponse)
+      } catch {
+        return
+      }
+    }
+  }
 
   for await (const message of response as any) {
     if (message?.type === 'system') {
@@ -184,6 +232,26 @@ export async function runAgent(options: RunAgentOptions): Promise<void> {
             const name = safeString(block?.name)
             const id = safeString(block?.id)
             const input = block?.input
+
+            updateCountersOnToolCall(counters)
+            const stepIndex = parseStepIndex((input as any)?.stepIndex)
+            if (id) toolUseStepIndex.set(id, stepIndex)
+
+            const violation = checkGuardrails(counters, guardrailLimits, stepIndex)
+            if (violation) {
+              options.logger.log({
+                event: 'autoqa.guardrail.triggered',
+                runId: options.runId,
+                specPath: options.specPath,
+                stepIndex,
+                code: violation.code,
+                limit: violation.limit,
+                actual: violation.actual,
+              })
+              await tryAbortStream()
+              throw violation
+            }
+
             writeDebug(
               options.debug,
               `tool_use=${name}${id ? ` id=${id}` : ''} input=${truncate(safeStringify(input), 400)}`,
@@ -208,6 +276,26 @@ export async function runAgent(options: RunAgentOptions): Promise<void> {
             const toolUseId = safeString(block?.tool_use_id)
             const isError = Boolean(block?.is_error)
             const text = safeString(block?.content)
+
+            const stepIndex = toolUseId ? (toolUseStepIndex.get(toolUseId) ?? null) : null
+            if (toolUseId) toolUseStepIndex.delete(toolUseId)
+            updateCountersOnToolResult(counters, stepIndex, isError)
+
+            const violation = checkGuardrails(counters, guardrailLimits, stepIndex)
+            if (violation) {
+              options.logger.log({
+                event: 'autoqa.guardrail.triggered',
+                runId: options.runId,
+                specPath: options.specPath,
+                stepIndex,
+                code: violation.code,
+                limit: violation.limit,
+                actual: violation.actual,
+              })
+              await tryAbortStream()
+              throw violation
+            }
+
             writeDebug(
               options.debug,
               `tool_result${toolUseId ? ` id=${toolUseId}` : ''} is_error=${isError} content=${truncate(text, 400)}`,
