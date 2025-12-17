@@ -30,6 +30,10 @@
 
 AutoQA-Agent 是一个创新的自动化测试工具，让 QA 和产品经理能够用自然语言 Markdown 编写验收测试，直接转换为可执行的测试流程。
 
+![AutoQA-Agent 总览图](https://i.v2ex.co/hr3K8E93l.png)
+
+更详细的架构边界与约束说明请参考 [`docs/architecture.md`](docs/architecture.md)。
+
 ### 核心目标
 
 - **消除脚本脆弱性**：通过智能定位策略，减少 UI 微小变动导致的测试维护成本
