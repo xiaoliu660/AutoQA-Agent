@@ -1,9 +1,11 @@
 import { createRequire } from 'node:module'
+import { basename, relative } from 'node:path'
 
 import type { BrowserContext, Page } from 'playwright'
 
 import type { MarkdownSpec } from '../markdown/spec-types.js'
 import { createBrowser } from '../browser/create-browser.js'
+import { captureJpegScreenshot, writeRunScreenshot } from '../browser/screenshot.js'
 import type { Logger } from '../logging/index.js'
 import {
   generateTraceName,
@@ -11,6 +13,20 @@ import {
   getRelativeTracePath,
   ensureTraceDir,
 } from './trace-paths.js'
+
+type ArtifactMode = 'all' | 'fail' | 'none'
+
+function getArtifactMode(): ArtifactMode {
+  const raw = (process.env.AUTOQA_ARTIFACTS ?? '').trim().toLowerCase()
+  if (raw === 'all' || raw === 'fail' || raw === 'none') return raw
+  return 'fail'
+}
+
+function shouldPersistArtifacts(mode: ArtifactMode, ok: boolean): boolean {
+  if (mode === 'all') return true
+  if (mode === 'none') return false
+  return !ok
+}
 
 export type ParsedSpec = {
   specPath: string
@@ -51,7 +67,17 @@ export type SpecTraceInfo = {
 
 export type RunSpecsResult =
   | { ok: true; chromiumVersion?: string; playwrightVersion?: string; specsPassed: number; specsFailed: number; traces: SpecTraceInfo[] }
-  | { ok: false; code: RunSpecsFailureCode; message: string; cause?: unknown; specsPassed?: number; specsFailed?: number; traces?: SpecTraceInfo[] }
+  | {
+      ok: false
+      code: RunSpecsFailureCode
+      message: string
+      cause?: unknown
+      specsPassed?: number
+      specsFailed?: number
+      failedSpecPath?: string
+      failureScreenshotPath?: string
+      traces?: SpecTraceInfo[]
+    }
 
 function getPlaywrightVersion(): string | undefined {
   const require = createRequire(import.meta.url)
@@ -74,6 +100,10 @@ function formatCauseSuffix(err: unknown): string {
   const msgPart = typeof message === 'string' && message.length > 0 ? `: ${message}` : ''
 
   return `${codePart}${msgPart}`
+}
+
+function toRelativeSpecPath(specPath: string, cwd: string): string {
+  return specPath.startsWith(cwd) ? relative(cwd, specPath) : basename(specPath)
 }
 
 function getErrorCode(err: unknown): string | undefined {
@@ -122,9 +152,9 @@ async function safeTracingStart(context: BrowserContext): Promise<TracingOutcome
   }
 }
 
-async function safeTracingStop(context: BrowserContext, tracePath: string): Promise<TracingOutcome> {
+async function safeTracingStop(context: BrowserContext, tracePath?: string): Promise<TracingOutcome> {
   try {
-    await context.tracing.stop({ path: tracePath })
+    await context.tracing.stop(tracePath ? { path: tracePath } : undefined)
     return { ok: true }
   } catch (err: unknown) {
     return { ok: false, errorCode: getErrorCode(err) }
@@ -135,6 +165,8 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
   let browser: Awaited<ReturnType<typeof createBrowser>> | undefined
   const { logger, cwd } = options
   const traces: SpecTraceInfo[] = []
+  const artifactMode = getArtifactMode()
+  let failureScreenshotPath: string | undefined
 
   try {
     browser = await createBrowser({
@@ -160,12 +192,6 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
   try {
     const chromiumVersion = options.debug ? browser.version() : undefined
     const playwrightVersion = options.debug ? getPlaywrightVersion() : undefined
-
-    try {
-      await ensureTraceDir(cwd, options.runId)
-    } catch {
-      // ignore - tracing will fail gracefully later
-    }
 
     for (let specIndex = 0; specIndex < options.specs.length; specIndex++) {
       const spec = options.specs[specIndex]
@@ -212,8 +238,8 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
       }
 
       const traceName = generateTraceName(specIndex, spec.specPath, cwd)
-      const traceAbsPath = getTracePath(cwd, options.runId, traceName)
       const traceRelPath = getRelativeTracePath(cwd, options.runId, traceName)
+      let traceAbsPath: string | undefined
 
       let tracingStarted = false
       let tracingStopped = false
@@ -221,10 +247,12 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
       let page: Page | undefined
 
       try {
-        const startOutcome = await safeTracingStart(context)
-        tracingStarted = startOutcome.ok
-        if (!startOutcome.ok) {
-          tracingError = formatTracingError('TRACING_START_FAILED', startOutcome.errorCode)
+        if (artifactMode !== 'none') {
+          const startOutcome = await safeTracingStart(context)
+          tracingStarted = startOutcome.ok
+          if (!startOutcome.ok) {
+            tracingError = formatTracingError('TRACING_START_FAILED', startOutcome.errorCode)
+          }
         }
 
         try {
@@ -251,17 +279,52 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
           specsFailed++
           specOk = false
           failureReason = `SPEC_EXECUTION_FAILED: ${formatCauseSuffix(err)}`
+
+          if (page && shouldPersistArtifacts(artifactMode, false)) {
+            try {
+              const captureResult = await captureJpegScreenshot(page, { quality: 60 })
+              if (captureResult.ok) {
+                const screenshotPath = await writeRunScreenshot({
+                  cwd,
+                  runId: options.runId,
+                  fileBaseName: `failure-${traceName}`,
+                  buffer: captureResult.value.buffer,
+                })
+                failureScreenshotPath = screenshotPath
+                logger.log({
+                  event: 'autoqa.spec.failure_screenshot',
+                  runId: options.runId,
+                  specPath: spec.specPath,
+                  screenshotPath,
+                })
+              }
+            } catch {
+            }
+          }
+
           throw setRunSpecsCode(err, 'SPEC_EXECUTION_FAILED')
         }
       } finally {
         await safeClose(page)
 
         if (tracingStarted && context) {
+          const ok = specOk ?? false
+          const shouldPersistTrace = shouldPersistArtifacts(artifactMode, ok)
+
+          if (shouldPersistTrace) {
+            try {
+              await ensureTraceDir(cwd, options.runId)
+              traceAbsPath = getTracePath(cwd, options.runId, traceName)
+            } catch {
+              traceAbsPath = undefined
+            }
+          }
+
           const stopOutcome = await safeTracingStop(context, traceAbsPath)
-          tracingStopped = stopOutcome.ok
+          tracingStopped = stopOutcome.ok && Boolean(traceAbsPath)
           if (!stopOutcome.ok) {
             tracingError = formatTracingError('TRACING_STOP_FAILED', stopOutcome.errorCode)
-          } else {
+          } else if (tracingStopped) {
             traces.push({ specPath: spec.specPath, tracePath: traceRelPath })
           }
         }
@@ -286,7 +349,8 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
 
     return { ok: true, chromiumVersion, playwrightVersion, specsPassed, specsFailed, traces }
   } catch (err: unknown) {
-    const specPart = activeSpecPath ? `: ${activeSpecPath}` : ''
+    const relativeSpecPath = activeSpecPath ? toRelativeSpecPath(activeSpecPath, cwd) : undefined
+    const specPart = relativeSpecPath ? `: ${relativeSpecPath}` : ''
     return {
       ok: false,
       code: getRunSpecsCode(err) ?? 'RUN_FAILED',
@@ -294,6 +358,8 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
       cause: err,
       specsPassed,
       specsFailed,
+      failedSpecPath: relativeSpecPath,
+      failureScreenshotPath,
       traces,
     }
   } finally {

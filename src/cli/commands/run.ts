@@ -32,6 +32,24 @@ function hasAnthropicApiKey(): boolean {
   return typeof apiKey === 'string' && apiKey.length > 0
 }
 
+type ArtifactMode = 'all' | 'fail' | 'none'
+
+function getArtifactMode(): ArtifactMode {
+  const raw = (process.env.AUTOQA_ARTIFACTS ?? '').trim().toLowerCase()
+  if (raw === 'all' || raw === 'fail' || raw === 'none') return raw
+  return 'fail'
+}
+
+function shouldWriteToFileForOutcome(mode: ArtifactMode, ok: boolean): boolean {
+  if (mode === 'all') return true
+  if (mode === 'none') return false
+  return !ok
+}
+
+function toSingleLine(value: string): string {
+  return value.replace(/\r?\n/g, ' ')
+}
+
 export function registerRunCommand(program: Command) {
   program
     .command('run')
@@ -90,9 +108,13 @@ export function registerRunCommand(program: Command) {
       const cwd = process.cwd()
       const artifactRoot = getArtifactRootPath(cwd, runId)
 
-      await ensureArtifactDir(cwd, runId)
+      const artifactMode = getArtifactMode()
+      const initialWriteToFile = artifactMode === 'all'
+      if (initialWriteToFile) {
+        await ensureArtifactDir(cwd, runId)
+      }
 
-      const logger = createLogger({ runId, cwd, debug: validated.value.debug })
+      const logger = createLogger({ runId, cwd, debug: validated.value.debug, writeToFile: initialWriteToFile })
 
       writeOutLine(writeErr, `runId=${runId}`)
       writeOutLine(writeErr, `baseUrl=${sanitizeBaseUrlForLog(validated.value.baseUrl)}`)
@@ -125,7 +147,7 @@ export function registerRunCommand(program: Command) {
           parsed = parseMarkdownSpec(markdown)
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err)
-          program.error(`Failed to parse spec: ${specPath}\n${message}`, { exitCode: 1 })
+          program.error(`Failed to parse spec: ${specPath}\n${message}`, { exitCode: 2 })
           return
         }
 
@@ -207,29 +229,80 @@ export function registerRunCommand(program: Command) {
 
       if (!runResult.ok) {
         const exitCode = runResult.code === 'SPEC_EXECUTION_FAILED' ? 1 : 2
+        const durationMs = Date.now() - runStartTime
+        const specsPassed = runResult.specsPassed ?? 0
+        const specsFailed = runResult.specsFailed ?? 1
 
-        writeOutLine(writeErr, `snapshotDir=${artifactRoot}/snapshots`)
-        writeOutLine(writeErr, `traceDir=${artifactRoot}/traces`)
-        if (runResult.traces && runResult.traces.length > 0) {
-          for (const trace of runResult.traces) {
-            writeOutLine(writeErr, `tracePath=${trace.tracePath}`)
-          }
-        }
+        const failedSpecPath = runResult.failedSpecPath
+        const screenshotPath = runResult.failureScreenshotPath
 
         logger.log({
           event: 'autoqa.run.finished',
           runId,
           exitCode,
-          durationMs: Date.now() - runStartTime,
-          specsPassed: runResult.specsPassed ?? 0,
-          specsFailed: runResult.specsFailed ?? 1,
+          durationMs,
+          specsPassed,
+          specsFailed,
           failureSummary: runResult.message,
         })
 
         await logger.flush()
+
+        if (shouldWriteToFileForOutcome(artifactMode, false)) {
+          await ensureArtifactDir(cwd, runId)
+          await logger.persistToFile?.()
+        }
+
+        const logPath = logger.logPath
+
+        writeOutLine(writeErr, `specsPassed=${specsPassed}`)
+        writeOutLine(writeErr, `specsFailed=${specsFailed}`)
+        writeOutLine(writeErr, `durationMs=${durationMs}`)
+        if (logPath && artifactMode !== 'none') {
+          writeOutLine(writeErr, `logPath=${logPath}`)
+        }
+        if (artifactMode !== 'none') {
+          writeOutLine(writeErr, `snapshotDir=${artifactRoot}/snapshots`)
+        }
+        if (failedSpecPath) {
+          writeOutLine(writeErr, `failedSpecPath=${failedSpecPath}`)
+        }
+        if (screenshotPath && artifactMode !== 'none') {
+          writeOutLine(writeErr, `screenshotsDir=${artifactRoot}/screenshots`)
+          writeOutLine(writeErr, `screenshotPath=${screenshotPath}`)
+        }
+        if (runResult.traces && runResult.traces.length > 0 && artifactMode !== 'none') {
+          writeOutLine(writeErr, `traceDir=${artifactRoot}/traces`)
+          for (const trace of runResult.traces) {
+            writeOutLine(writeErr, `tracePath=${trace.tracePath}`)
+          }
+        }
+        writeOutLine(writeErr, `failureSummary=${toSingleLine(runResult.message)}`)
         program.error(runResult.message, { exitCode })
         return
       }
+
+      const durationMs = Date.now() - runStartTime
+      const specsPassed = runResult.specsPassed
+      const specsFailed = runResult.specsFailed
+
+      logger.log({
+        event: 'autoqa.run.finished',
+        runId,
+        exitCode: 0,
+        durationMs,
+        specsPassed,
+        specsFailed,
+      })
+
+      await logger.flush()
+
+      if (shouldWriteToFileForOutcome(artifactMode, true)) {
+        await ensureArtifactDir(cwd, runId)
+        await logger.persistToFile?.()
+      }
+
+      const logPath = logger.logPath
 
       if (validated.value.debug && runResult.playwrightVersion) {
         writeOutLine(writeErr, `playwrightVersion=${runResult.playwrightVersion}`)
@@ -239,23 +312,23 @@ export function registerRunCommand(program: Command) {
         writeOutLine(writeErr, `chromiumVersion=${runResult.chromiumVersion}`)
       }
 
-      writeOutLine(writeErr, `traceDir=${artifactRoot}/traces`)
-      if (runResult.traces && runResult.traces.length > 0) {
+      writeOutLine(writeErr, `specsPassed=${specsPassed}`)
+      writeOutLine(writeErr, `specsFailed=${specsFailed}`)
+      writeOutLine(writeErr, `durationMs=${durationMs}`)
+      if (logPath && artifactMode !== 'none') {
+        writeOutLine(writeErr, `logPath=${logPath}`)
+      }
+      if (
+        runResult.traces &&
+        runResult.traces.length > 0 &&
+        artifactMode !== 'none' &&
+        shouldWriteToFileForOutcome(artifactMode, true)
+      ) {
+        writeOutLine(writeErr, `traceDir=${artifactRoot}/traces`)
         for (const trace of runResult.traces) {
           writeOutLine(writeErr, `tracePath=${trace.tracePath}`)
         }
       }
-
-      logger.log({
-        event: 'autoqa.run.finished',
-        runId,
-        exitCode: 0,
-        durationMs: Date.now() - runStartTime,
-        specsPassed: parsedSpecs.length,
-        specsFailed: 0,
-      })
-
-      await logger.flush()
 
       for (const specPath of result.specs) {
         writeOutLine(writeOut, specPath)

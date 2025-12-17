@@ -1,4 +1,4 @@
-export { createLogger, getArtifactRootPath, ensureArtifactDir } from './logger.js'
+export { createLogger, getArtifactRootPath, ensureArtifactDir, getRelativeLogPath } from './logger.js'
 export type { Logger, LoggerOptions } from './logger.js'
 export type {
   LogEvent,

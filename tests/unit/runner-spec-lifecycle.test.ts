@@ -136,7 +136,7 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
 
     expect(result.ok).toBe(false)
     if (!result.ok) {
-      expect(result.message).toContain('/specs/fail.md')
+      expect(result.message).toContain('fail.md')
     }
 
     expect(pageClose).toHaveBeenCalledTimes(1)
@@ -189,6 +189,9 @@ describe('runner/runSpecs (trace recording)', () => {
     vi.resetModules()
     logMock.mockClear()
 
+    const originalArtifacts = process.env.AUTOQA_ARTIFACTS
+    process.env.AUTOQA_ARTIFACTS = 'all'
+
     const tracingStart = vi.fn(async () => {})
     const tracingStop = vi.fn(async () => {})
     const pageClose = vi.fn(async () => {})
@@ -220,31 +223,36 @@ describe('runner/runSpecs (trace recording)', () => {
       ensureTraceDir: vi.fn(async () => {}),
     }))
 
-    const { runSpecs } = await import('../../src/runner/run-specs.js')
+    try {
+      const { runSpecs } = await import('../../src/runner/run-specs.js')
 
-    const result = await runSpecs({
-      runId: 'run-trace-1',
-      baseUrl: 'http://example.test',
-      headless: true,
-      debug: false,
-      specs: [
-        { specPath: '/specs/a.md', spec: dummySpec },
-        { specPath: '/specs/b.md', spec: dummySpec },
-      ],
-      logger: mockLogger,
-      cwd: '/tmp/test-cwd',
-      onSpec: vi.fn(async () => {}),
-    })
+      const result = await runSpecs({
+        runId: 'run-trace-1',
+        baseUrl: 'http://example.test',
+        headless: true,
+        debug: false,
+        specs: [
+          { specPath: '/specs/a.md', spec: dummySpec },
+          { specPath: '/specs/b.md', spec: dummySpec },
+        ],
+        logger: mockLogger,
+        cwd: '/tmp/test-cwd',
+        onSpec: vi.fn(async () => {}),
+      })
 
-    expect(result.ok).toBe(true)
-    expect(tracingStart).toHaveBeenCalledTimes(2)
-    expect(tracingStop).toHaveBeenCalledTimes(2)
+      expect(result.ok).toBe(true)
+      expect(tracingStart).toHaveBeenCalledTimes(2)
+      expect(tracingStop).toHaveBeenCalledTimes(2)
 
-    expect(tracingStart).toHaveBeenCalledWith({ screenshots: true, snapshots: true, sources: true })
+      expect(tracingStart).toHaveBeenCalledWith({ screenshots: true, snapshots: true, sources: true })
 
-    if (result.ok) {
-      expect(result.traces).toHaveLength(2)
-      expect(result.traces[0]?.tracePath).toMatch(/\.autoqa\/runs\/run-trace-1\/traces\/.*\.zip$/)
+      if (result.ok) {
+        expect(result.traces).toHaveLength(2)
+        expect(result.traces[0]?.tracePath).toMatch(/\.autoqa\/runs\/run-trace-1\/traces\/.*\.zip$/)
+      }
+    } finally {
+      if (typeof originalArtifacts === 'string') process.env.AUTOQA_ARTIFACTS = originalArtifacts
+      else delete process.env.AUTOQA_ARTIFACTS
     }
   })
 

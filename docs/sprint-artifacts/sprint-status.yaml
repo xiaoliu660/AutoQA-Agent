@@ -64,7 +64,7 @@ development_status:
   3-1-assert-tools-asserttextpresent-assertelementvisible: done
   3-2-errors-to-agent-sdk-self-heal-retry: done
   3-3-self-heal-guardrails-max-tool-calls-errors-retries: done
-  3-4-failure-artifacts-exit-codes-ci: backlog
+  3-4-failure-artifacts-exit-codes-ci: done
   epic-3-retrospective: optional
 
   epic-4: backlog

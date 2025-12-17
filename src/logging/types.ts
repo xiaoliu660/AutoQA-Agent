@@ -79,6 +79,12 @@ export type GuardrailTriggeredEvent = LogEventBase & {
   actual: number
 }
 
+export type SpecFailureScreenshotEvent = LogEventBase & {
+  event: 'autoqa.spec.failure_screenshot'
+  specPath: string
+  screenshotPath: string
+}
+
 export type LogEvent =
   | RunStartedEvent
   | RunFinishedEvent
@@ -87,3 +93,4 @@ export type LogEvent =
   | ToolCalledEvent
   | ToolResultEvent
   | GuardrailTriggeredEvent
+  | SpecFailureScreenshotEvent
