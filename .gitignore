@@ -7,3 +7,4 @@ autoqa.config.json
 # specs/
 conversations/
 scripts
+test-results

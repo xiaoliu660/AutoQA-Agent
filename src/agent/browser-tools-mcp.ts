@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { Locator, Page } from 'playwright'
 
 import { click, fill, navigate, scroll, wait, assertTextPresent, assertElementVisible } from '../tools/index.js'
+import { resolveVisibleElement } from '../tools/assertions/assert-element-visible.js'
 import { resolveClickTarget, trySelectOptionByLabel } from '../tools/click.js'
 import { resolveFillTarget } from '../tools/fill.js'
 import { toToolError } from '../tools/playwright-error.js'
@@ -705,6 +706,8 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
+          let irPreActionResult: PreActionResult | null = null
+
           const { result, meta } = await runWithPreActionScreenshot({
             page: options.page,
             runId: options.runId,
@@ -728,6 +731,9 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
                     },
                   }
                 }
+
+                irPreActionResult = await irRecorder.prepareForAction(options.page, 'select_option', locator)
+
                 await locator.selectOption({ label })
                 return { ok: true as const, data: { ref, label } }
               } catch (err: unknown) {
@@ -746,6 +752,19 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             : ({ captured: false } as SnapshotMeta)
 
           logToolResult('select_option', startTime, result as any, stepIndex, { ...meta, snapshot: snapshotMeta })
+
+          if (result.ok && irRecorder.isEnabled()) {
+            await irRecorder.recordAction(
+              {
+                page: options.page,
+                toolName: 'select_option' as IRToolName,
+                toolInput: { ref, label },
+                stepIndex,
+              },
+              { ok: true },
+              irPreActionResult,
+            )
+          }
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
@@ -899,6 +918,35 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
 
           logToolResult('assertTextPresent', startTime, result as any, stepIndex, { ...meta, snapshot: snapshotMeta })
 
+          if (result.ok && irRecorder.isEnabled()) {
+            let visibleNth: number | undefined
+            try {
+              const locator = options.page.getByText(text)
+              const count = await locator.count()
+              const limit = Math.min(count, 5)
+              for (let i = 0; i < limit; i++) {
+                const candidate = locator.nth(i)
+                if (await candidate.isVisible()) {
+                  visibleNth = i
+                  break
+                }
+              }
+            } catch {
+              visibleNth = undefined
+            }
+
+            await irRecorder.recordAction(
+              {
+                page: options.page,
+                toolName: 'assertTextPresent' as IRToolName,
+                toolInput: { text, ...(typeof visibleNth === 'number' ? { visibleNth } : {}) },
+                stepIndex,
+              },
+              { ok: true },
+              null,
+            )
+          }
+
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
           if (!result.ok && meta.imageBlock) content.push(meta.imageBlock)
@@ -949,6 +997,8 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
+          let irPreActionResult: PreActionResult | null = null
+
           const { result, meta } = await runWithPreActionScreenshot({
             page: options.page,
             runId: options.runId,
@@ -984,6 +1034,11 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
                       },
                     }
                   }
+
+                  if (irRecorder.isEnabled()) {
+                    irPreActionResult = await irRecorder.prepareForAction(options.page, 'assertElementVisible', locator)
+                  }
+
                   const isVisible = await locator.isVisible()
                   if (isVisible) {
                     return { ok: true as const, data: { ref, targetDescription } }
@@ -1001,7 +1056,27 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
                   return { ok: false as const, error: toToolError(err, { defaultCode: 'ASSERTION_FAILED' }) }
                 }
               }
-              return assertElementVisible({ page: options.page, targetDescription })
+
+              try {
+                const locator = await resolveVisibleElement(options.page, targetDescription)
+                if (locator) {
+                  if (irRecorder.isEnabled()) {
+                    irPreActionResult = await irRecorder.prepareForAction(options.page, 'assertElementVisible', locator)
+                  }
+                  return { ok: true as const, data: { targetDescription } }
+                }
+                return {
+                  ok: false as const,
+                  error: {
+                    code: 'ASSERTION_FAILED' as const,
+                    message: `Element not visible: "${targetDescription}"`,
+                    retriable: true,
+                    cause: undefined,
+                  },
+                }
+              } catch (err: unknown) {
+                return { ok: false as const, error: toToolError(err, { defaultCode: 'ASSERTION_FAILED' }) }
+              }
             },
           })
 
@@ -1015,6 +1090,19 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             : ({ captured: false } as SnapshotMeta)
 
           logToolResult('assertElementVisible', startTime, result as any, stepIndex, { ...meta, snapshot: snapshotMeta })
+
+          if (result.ok && irRecorder.isEnabled()) {
+            await irRecorder.recordAction(
+              {
+                page: options.page,
+                toolName: 'assertElementVisible' as IRToolName,
+                toolInput: { targetDescription, ref },
+                stepIndex,
+              },
+              { ok: true },
+              irPreActionResult,
+            )
+          }
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })

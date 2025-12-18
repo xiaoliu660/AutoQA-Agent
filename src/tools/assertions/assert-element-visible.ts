@@ -98,7 +98,7 @@ async function pickFirstVisibleMatch(locator: Locator): Promise<Locator | undefi
   }
 }
 
-async function resolveVisibleElement(page: Page, targetDescription: string): Promise<Locator | undefined> {
+export async function resolveVisibleElement(page: Page, targetDescription: string): Promise<Locator | undefined> {
   const candidates: Locator[] = []
 
   for (const selector of extractAttributeSelectors(targetDescription)) {

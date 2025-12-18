@@ -124,11 +124,12 @@ export const ELEMENT_TARGETING_TOOLS: ReadonlySet<IRToolName> = new Set([
   'click',
   'fill',
   'select_option',
+  'assertElementVisible',
 ])
 
 /**
  * Check if a tool targets a specific element.
  */
-export function isElementTargetingTool(toolName: string): toolName is 'click' | 'fill' | 'select_option' {
+export function isElementTargetingTool(toolName: string): toolName is 'click' | 'fill' | 'select_option' | 'assertElementVisible' {
   return ELEMENT_TARGETING_TOOLS.has(toolName as IRToolName)
 }

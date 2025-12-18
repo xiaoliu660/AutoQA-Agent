@@ -13,6 +13,8 @@ import {
   getRelativeTracePath,
   ensureTraceDir,
 } from './trace-paths.js'
+import { exportPlaywrightTest } from './export-playwright-test.js'
+import { getRelativeExportPath } from './export-paths.js'
 
 type ArtifactMode = 'all' | 'fail' | 'none'
 
@@ -65,8 +67,15 @@ export type SpecTraceInfo = {
   tracePath: string
 }
 
+export type SpecExportInfo = {
+  specPath: string
+  exportPath: string
+  ok: boolean
+  reason?: string
+}
+
 export type RunSpecsResult =
-  | { ok: true; chromiumVersion?: string; playwrightVersion?: string; specsPassed: number; specsFailed: number; traces: SpecTraceInfo[] }
+  | { ok: true; chromiumVersion?: string; playwrightVersion?: string; specsPassed: number; specsFailed: number; traces: SpecTraceInfo[]; exports: SpecExportInfo[] }
   | {
       ok: false
       code: RunSpecsFailureCode
@@ -77,6 +86,7 @@ export type RunSpecsResult =
       failedSpecPath?: string
       failureScreenshotPath?: string
       traces?: SpecTraceInfo[]
+      exports?: SpecExportInfo[]
     }
 
 function getPlaywrightVersion(): string | undefined {
@@ -165,6 +175,7 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
   let browserResult: Awaited<ReturnType<typeof createBrowser>> | undefined
   const { logger, cwd } = options
   const traces: SpecTraceInfo[] = []
+  const exports: SpecExportInfo[] = []
   const artifactMode = getArtifactMode()
   let failureScreenshotPath: string | undefined
 
@@ -353,10 +364,71 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
             ...(tracingError ? { tracingError } : {}),
           })
         }
+
+        // Export Playwright test if spec succeeded
+        if (specOk) {
+          try {
+            const exportResult = await exportPlaywrightTest({
+              cwd,
+              runId: options.runId,
+              specPath: spec.specPath,
+              spec: spec.spec,
+              baseUrl: options.baseUrl,
+            })
+
+            if (exportResult.ok) {
+              const relativeExportPath = exportResult.relativePath
+              exports.push({
+                specPath: spec.specPath,
+                exportPath: relativeExportPath,
+                ok: true,
+              })
+
+              logger.log({
+                event: 'autoqa.spec.exported',
+                runId: options.runId,
+                specPath: spec.specPath,
+                exportPath: relativeExportPath,
+              })
+            } else {
+              const relativeExportPath = getRelativeExportPath(cwd, spec.specPath)
+              exports.push({
+                specPath: spec.specPath,
+                exportPath: relativeExportPath,
+                ok: false,
+                reason: exportResult.reason,
+              })
+
+              logger.log({
+                event: 'autoqa.spec.export_failed',
+                runId: options.runId,
+                specPath: spec.specPath,
+                reason: exportResult.reason,
+                ...(exportResult.missingLocators ? { missingLocators: exportResult.missingLocators } : {}),
+              })
+            }
+          } catch (exportErr: unknown) {
+            // Export failure should not crash the run
+            const exportErrMsg = exportErr instanceof Error ? exportErr.message : String(exportErr)
+            exports.push({
+              specPath: spec.specPath,
+              exportPath: getRelativeExportPath(cwd, spec.specPath),
+              ok: false,
+              reason: `Export error: ${exportErrMsg}`,
+            })
+
+            logger.log({
+              event: 'autoqa.spec.export_failed',
+              runId: options.runId,
+              specPath: spec.specPath,
+              reason: `Export error: ${exportErrMsg}`,
+            })
+          }
+        }
       }
     }
 
-    return { ok: true, chromiumVersion, playwrightVersion, specsPassed, specsFailed, traces }
+    return { ok: true, chromiumVersion, playwrightVersion, specsPassed, specsFailed, traces, exports }
   } catch (err: unknown) {
     const relativeSpecPath = activeSpecPath ? toRelativeSpecPath(activeSpecPath, cwd) : undefined
     const specPart = relativeSpecPath ? `: ${relativeSpecPath}` : ''
@@ -370,6 +442,7 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
       failedSpecPath: relativeSpecPath,
       failureScreenshotPath,
       traces,
+      exports,
     }
   } finally {
     if (browserResult?.persistentContext) {

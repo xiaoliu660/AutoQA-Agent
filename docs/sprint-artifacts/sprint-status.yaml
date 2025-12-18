@@ -69,5 +69,5 @@ development_status:
 
   epic-4: in-progress
   4-1-runtime-locator-validation-ir: done
-  4-2-auto-export-playwright-test: backlog
+  4-2-auto-export-playwright-test: done
   epic-4-retrospective: optional

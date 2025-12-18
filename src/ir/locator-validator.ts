@@ -15,7 +15,7 @@ import { fingerprintsMatch } from './fingerprint.js'
  * Action type for validation context.
  * Different actions have different validation requirements.
  */
-export type ActionType = 'click' | 'fill' | 'select_option'
+export type ActionType = 'click' | 'fill' | 'select_option' | 'assertElementVisible'
 
 /**
  * Validation options.

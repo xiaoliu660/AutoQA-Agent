@@ -79,7 +79,9 @@ export function toSafeRelativePath(absolutePath: string, cwd: string): string {
  * Redact sensitive data from tool input before writing to IR.
  */
 export function redactToolInputForIR(toolName: string, input: Record<string, unknown>): Record<string, unknown> {
-  const base = redactToolInput(toolName, input)
+  const base = toolName === 'assertTextPresent' || toolName === 'assertElementVisible'
+    ? input
+    : redactToolInput(toolName, input)
   const result: Record<string, unknown> = {}
 
   for (const [key, value] of Object.entries(base)) {

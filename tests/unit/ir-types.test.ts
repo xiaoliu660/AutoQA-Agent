@@ -8,6 +8,7 @@ describe('IR Types', () => {
       expect(ELEMENT_TARGETING_TOOLS.has('click')).toBe(true)
       expect(ELEMENT_TARGETING_TOOLS.has('fill')).toBe(true)
       expect(ELEMENT_TARGETING_TOOLS.has('select_option')).toBe(true)
+      expect(ELEMENT_TARGETING_TOOLS.has('assertElementVisible')).toBe(true)
     })
 
     it('should not include non-element-targeting tools', () => {
@@ -23,6 +24,7 @@ describe('IR Types', () => {
       expect(isElementTargetingTool('click')).toBe(true)
       expect(isElementTargetingTool('fill')).toBe(true)
       expect(isElementTargetingTool('select_option')).toBe(true)
+      expect(isElementTargetingTool('assertElementVisible')).toBe(true)
     })
 
     it('should return false for non-element-targeting tools', () => {
