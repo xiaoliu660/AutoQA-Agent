@@ -80,23 +80,22 @@ export async function runWithPreActionScreenshot<TData>(
   const contextMode = getToolContextMode()
   const timing = getScreenshotTiming()
 
-  const captureBefore = async () => {
-    return contextMode === 'screenshot'
-      ? await captureJpegScreenshot(options.page, { quality: options.quality })
-      : { ok: false as const, message: 'Screenshot capture disabled by AUTOQA_TOOL_CONTEXT' }
-  }
+  const artifactMode = getArtifactMode()
 
-  const captureAfter = async () => {
-    return contextMode === 'screenshot'
-      ? await captureJpegScreenshot(options.page, { quality: options.quality })
-      : { ok: false as const, message: 'Screenshot capture disabled by AUTOQA_TOOL_CONTEXT' }
-  }
+  const canDecideBeforeAction = artifactMode === 'all'
+  const shouldCaptureBeforeAction = contextMode === 'screenshot' && canDecideBeforeAction && timing === 'pre'
 
-  const capture = timing === 'pre' ? await captureBefore() : undefined
+  const preCapture = shouldCaptureBeforeAction
+    ? await captureJpegScreenshot(options.page, { quality: options.quality })
+    : undefined
 
   const toolResult = await options.action()
 
-  const finalCapture = timing === 'post' ? await captureAfter() : capture
+  const shouldCapture = contextMode === 'screenshot' && shouldWriteArtifacts(options.debug, toolResult.ok)
+
+  const finalCapture = shouldCapture
+    ? (timing === 'pre' && preCapture ? preCapture : await captureJpegScreenshot(options.page, { quality: options.quality }))
+    : undefined
 
   let screenshot: ToolScreenshot | undefined
   let imageBlock: ImageContentBlock | undefined

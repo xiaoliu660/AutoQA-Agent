@@ -26,4 +26,7 @@ test('saucedemo 01 login', async ({ page }) => {
   // Step 6: Verify the user is logged in and sees the inventory/products page (e.g. header shows "Products")
   const locator6_1 = page.getByText('Products');
   await expect(locator6_1.nth(0)).toBeVisible();
+  const locator6_2 = page.locator('[data-test="title"]');
+  await expect(locator6_2).toHaveCount(1);
+  await expect(locator6_2).toBeVisible();
 })
