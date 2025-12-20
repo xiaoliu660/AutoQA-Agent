@@ -10,7 +10,7 @@ describe('cli/commands/plan', () => {
 
       const planCommand = program.commands.find((cmd) => cmd.name() === 'plan')
       expect(planCommand).toBeDefined()
-      expect(planCommand?.description()).toBe('Plan and explore test scenarios')
+      expect(planCommand?.description()).toBe('Plan and explore test scenarios (default: run full exploration + generation)')
     })
 
     it('should register explore subcommand', () => {
