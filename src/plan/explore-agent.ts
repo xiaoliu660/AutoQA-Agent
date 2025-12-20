@@ -195,11 +195,12 @@ function parseExplorationResult(agentOutput: string): {
 export async function runExploreAgent(options: ExploreAgentOptions): Promise<ExplorationResult> {
   const { runId, config, page, cwd, logger, debug = false } = options
   const startedAt = new Date().toISOString()
-  
+
   const transcript: TranscriptEntry[] = []
   let turnCount = 0
   let snapshotCount = 0
   let guardrailTriggered: GuardrailTrigger | undefined
+  let lastError: Error | undefined
 
   const guardrailLimits = {
     maxAgentTurns: config.guardrails?.maxAgentTurnsPerRun ?? 200,
@@ -214,6 +215,10 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
     url: config.baseUrl,
     depth: config.maxDepth ?? 3,
   })
+
+  if (debug) {
+    console.error(`[explore] Starting exploration with config:`, JSON.stringify(config, null, 2))
+  }
 
   // Create MCP server for browser tools
   const server = createBrowserToolsMcpServer({
@@ -241,14 +246,17 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
   })
 
   let agentOutput = ''
-  let lastError: Error | undefined
 
   try {
+    if (debug) {
+      console.error(`[explore] Calling Agent SDK with maxTurns: ${guardrailLimits.maxAgentTurns}`)
+    }
+
     const response = query({
       prompt,
       options: {
         maxTurns: guardrailLimits.maxAgentTurns,
-        tools: [],
+        tools: EXPLORE_ALLOWED_TOOLS,
         mcpServers: {
           browser: server,
         },
@@ -363,6 +371,7 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
     }
   } catch (err) {
     lastError = err instanceof Error ? err : new Error(String(err))
+    console.error('[explore] Error during exploration:', err)
     logger.log({
       event: 'autoqa.plan.explore.failed',
       runId,
@@ -371,6 +380,12 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
   }
 
   const finishedAt = new Date().toISOString()
+
+  // Debug: Log agent output
+  if (debug || !agentOutput) {
+    console.error(`[explore] Agent output length: ${agentOutput.length}`)
+    console.error(`[explore] Agent output preview: ${agentOutput.slice(0, 500)}`)
+  }
 
   // Parse the agent's exploration result
   const parsed = parseExplorationResult(agentOutput)
