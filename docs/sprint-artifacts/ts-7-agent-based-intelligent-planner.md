@@ -1,6 +1,6 @@
 # Epic 7: Agent 驱动智能测试规划器（基于 snapshot 的自动化测试计划生成）- Tech Spec（Story 7.1–7.5）
 
-Status: draft
+Status: complete
 
 ## Goals
 
@@ -194,3 +194,356 @@ Status: draft
 - [Source: docs/epics.md#Story-7.5-与现有执行导出工具链的集成]  
 - [Source: docs/architecture.md#Core Architectural Decisions（核心架构决策）]  
 - [Source: docs/prd.md#Functional Requirements]
+
+## Implementation Status (Story 7.2)
+
+### Completed Features
+
+1. **Data Models** ✅
+   - All types defined in `src/plan/types.ts`
+   - PlanConfig, TestPlan, TestCasePlan, FlowPlan implemented
+   - ExplorationGraph and supporting types ready
+
+2. **MCP Tools** ✅
+   - `list_known_pages`: Returns discovered pages with metadata
+   - `get_page_snapshot`: Retrieves page details and elements
+   - `propose_test_cases_for_page`: Provides page context for test design
+
+3. **Agent Integration** ✅
+   - Claude Agent SDK integration in `src/plan/plan-agent.ts`
+   - Structured prompt with clear output requirements
+   - JSON parsing and validation
+
+4. **Markdown Rendering** ✅
+   - `buildMarkdownForTestCase` in `src/plan/output.ts`
+   - Supports Preconditions and ordered steps
+   - Placeholder usage for sensitive data
+
+5. **CLI Commands** ✅
+   - `autoqa plan explore` - Application exploration
+   - `autoqa plan generate` - Test case generation (needs run ID)
+   - `autoqa plan run` - Combined workflow
+
+### CLI Usage Examples
+
+```bash
+# Explore application
+autoqa plan explore -u https://example.com -d 3
+
+# Generate test cases from exploration
+autoqa plan generate --run-id <uuid>
+
+# Combined workflow
+autoqa plan run -u https://example.com -d 3 --test-types functional,form,security
+```
+
+### Output Structure
+
+```
+.autoqa/runs/<runId>/
+├── plan-explore/
+│   ├── explore-graph.json
+│   ├── explore-elements.json
+│   └── explore-transcript.jsonl
+└── plan/
+    ├── test-plan.json
+    └── specs/
+        ├── functional-p0-login.md
+        ├── form-p1-search.md
+        └── security-p0-xss.md
+```
+
+### Implementation Notes
+
+- Agent decides test types dynamically based on page analysis
+- TypeScript only provides context and tools, no hardcoded rules
+- All outputs use placeholders for sensitive data
+- Guardrails implemented to control resource usage
+
+## MCP Tools 输入输出结构详细约定
+
+### 工具概述
+
+Planner Agent 通过 MCP (Model Context Protocol) 工具与探索结果交互。所有工具在 `src/plan/planner-tools-mcp.ts` 中实现，使用 `@anthropic-ai/claude-agent-sdk` 暴露。
+
+### 工具 1: `list_known_pages`
+
+**功能**: 列出探索阶段发现的所有页面
+
+**输入参数**: 无
+
+**输出结构**:
+```typescript
+{
+  pages: Array<{
+    id: string           // 页面唯一标识符
+    url: string          // 页面完整 URL
+    title?: string       // 页面标题（从 document.title 获取）
+    depth: number        // 探索深度（从起始页面开始计数）
+    snapshotRef?: string // snapshot 文件引用路径
+  }>
+}
+```
+
+**使用场景**: Agent 在规划测试用例前，先了解整体应用结构和已发现的页面
+
+**实现示例**:
+```typescript
+tool(
+  'list_known_pages',
+  'List pages discovered during exploration.',
+  {},
+  async () => {
+    const pages = graph.pages.map((page) => ({
+      id: page.id,
+      url: page.url,
+      title: page.title,
+      depth: page.depth,
+      snapshotRef: page.snapshotRef,
+    }))
+    return { pages }
+  }
+)
+```
+
+### 工具 2: `get_page_snapshot`
+
+**功能**: 获取指定页面的详细信息和 snapshot 引用
+
+**输入参数**:
+```typescript
+{
+  pageId: string  // 页面 ID（从 list_known_pages 获取）
+}
+```
+
+**输出结构**:
+```typescript
+{
+  ok: boolean
+  error?: string  // 当 ok=false 时提供错误信息
+  page?: {
+    id: string
+    url: string
+    title?: string
+    depth: number
+    snapshotRef?: string
+  }
+}
+```
+
+**错误处理**:
+- 当 `pageId` 不存在时，返回 `{ ok: false, error: "Page not found: <pageId>" }`
+- 成功时返回 `{ ok: true, page: {...} }`
+
+**使用场景**: Agent 需要查看特定页面的详细信息以决定测试策略
+
+**实现示例**:
+```typescript
+tool(
+  'get_page_snapshot',
+  'Get snapshot reference and basic info for a given page id.',
+  { pageId: z.string() },
+  async (args) => {
+    const page = graph.pages.find((p) => p.id === args.pageId)
+    if (!page) {
+      return { ok: false, error: `Page not found: ${args.pageId}` }
+    }
+    return {
+      ok: true,
+      page: {
+        id: page.id,
+        url: page.url,
+        title: page.title,
+        depth: page.depth,
+        snapshotRef: page.snapshotRef,
+      },
+    }
+  }
+)
+```
+
+### 工具 3: `propose_test_cases_for_page`
+
+**功能**: 返回页面信息和可选的备注，帮助 Agent 设计测试用例。此工具本身不创建 TestCasePlan 对象，仅提供上下文信息
+
+**输入参数**:
+```typescript
+{
+  pageId: string      // 页面 ID
+  notes?: string      // 可选的备注或推理说明
+}
+```
+
+**输出结构**:
+```typescript
+{
+  ok: boolean
+  error?: string  // 当 ok=false 时提供错误信息
+  page?: {
+    id: string
+    url: string
+    title?: string
+    depth: number
+    snapshotRef?: string
+  }
+  notes?: string  // 回显输入的备注
+}
+```
+
+**使用场景**: Agent 针对特定页面进行测试用例设计时，获取页面上下文。Agent 在调用此工具后，会在自己的输出中生成 TestCasePlan 结构
+
+**实现示例**:
+```typescript
+tool(
+  'propose_test_cases_for_page',
+  'Return page info and optional notes to help you design test cases.',
+  {
+    pageId: z.string(),
+    notes: z.string().optional(),
+  },
+  async (args) => {
+    const page = graph.pages.find((p) => p.id === args.pageId)
+    if (!page) {
+      return { ok: false, error: `Page not found: ${args.pageId}` }
+    }
+    return {
+      ok: true,
+      page: {
+        id: page.id,
+        url: page.url,
+        title: page.title,
+        depth: page.depth,
+        snapshotRef: page.snapshotRef,
+      },
+      notes: args.notes,
+    }
+  }
+)
+```
+
+## Agent 输出结构约定
+
+### 输出方式
+
+Agent 不通过工具返回 TestPlan，而是在完成所有工具调用后，直接输出 JSON 格式的测试计划。
+
+### 输出格式
+
+```json
+{
+  "flows": [
+    {
+      "id": "flow-id",
+      "name": "Flow Name",
+      "description": "Flow description",
+      "pagePath": ["page-id-1", "page-id-2"]
+    }
+  ],
+  "cases": [
+    {
+      "id": "case-id",
+      "name": "Test case name",
+      "type": "functional",
+      "priority": "p0",
+      "relatedPageIds": ["page-id-1", "page-id-2"],
+      "markdownPath": "relative/path/to/spec.md",
+      "preconditions": ["Precondition 1", "Precondition 2"],
+      "steps": [
+        {
+          "description": "Step description",
+          "expectedResult": "Expected outcome"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### 字段详细说明
+
+#### `flows` 数组（可选）
+
+测试流程分组，用于组织相关的测试用例：
+
+- `id` (string, 必需): 流程唯一标识符
+- `name` (string, 必需): 流程名称
+- `description` (string, 可选): 流程描述
+- `pagePath` (string[], 可选): 流程涉及的页面 ID 序列
+
+#### `cases` 数组（必需）
+
+测试用例列表，至少包含一个用例：
+
+- `id` (string, 必需): 用例唯一标识符
+- `name` (string, 必需): 用例名称
+- `type` (string, 必需): 测试类型，必须是以下之一：
+  - `"functional"` - 功能测试
+  - `"form"` - 表单测试
+  - `"navigation"` - 导航测试
+  - `"responsive"` - 响应式测试
+  - `"boundary"` - 边界条件测试
+  - `"security"` - 安全性测试
+- `priority` (string, 必需): 优先级，必须是以下之一：
+  - `"p0"` - 最高优先级（关键功能）
+  - `"p1"` - 中等优先级（重要功能）
+  - `"p2"` - 较低优先级（次要功能）
+- `relatedPageIds` (string[], 必需): 相关页面 ID 列表
+- `markdownPath` (string, 必需): 生成的 Markdown 文件相对路径（相对于 `.autoqa/runs/<runId>/plan/specs/`）
+- `preconditions` (string[], 可选): 前置条件列表
+- `steps` (array, 可选但推荐): 测试步骤列表
+  - `description` (string): 步骤描述
+  - `expectedResult` (string): 预期结果
+
+### 解析与验证流程
+
+TypeScript 代码负责解析和验证 Agent 输出：
+
+1. **提取 JSON** (`extractJsonFromOutput` 函数)
+   - 支持 ```json 代码块格式
+   - 支持裸 JSON 格式
+   - 使用括号深度匹配算法精确提取
+
+2. **解析 JSON** (`parseTestPlanOutput` 函数)
+   - 使用 `JSON.parse` 解析字符串
+   - 验证基本结构（flows 和 cases 数组）
+
+3. **规范化数据** 
+   - `normalizeFlow`: 规范化流程数据，提供默认值
+   - `normalizeCase`: 规范化测试用例数据，验证类型和优先级
+
+4. **验证规则**
+   - 至少包含一个测试用例
+   - 类型必须是六种预定义类型之一
+   - 优先级必须是 p0/p1/p2 之一
+   - 如果字段缺失或无效，使用合理的默认值
+
+### 占位符约定
+
+**敏感数据处理**:
+- 使用双花括号占位符：`{{USERNAME}}`、`{{PASSWORD}}`、`{{API_KEY}}`
+- 在 Markdown 渲染时保留占位符，不替换为实际值
+- 执行时通过环境变量或配置文件提供实际值
+
+**示例**:
+```markdown
+## Preconditions
+- User has valid credentials: {{USERNAME}} / {{PASSWORD}}
+
+## Steps
+1. Navigate to login page
+2. Enter username: {{USERNAME}}
+3. Enter password: {{PASSWORD}}
+4. Click "Login" button
+   - Expected: User is redirected to dashboard
+```
+
+### 错误处理
+
+如果 Agent 输出不符合预期，TypeScript 代码会抛出明确的错误信息：
+
+- `"Failed to extract JSON TestPlan from planner output"` - 无法提取 JSON
+- `"Failed to parse TestPlan JSON: <error>"` - JSON 解析失败
+- `"Planner Agent returned no test cases in TestPlan"` - 没有生成任何测试用例
+
+这些错误会被 orchestrator 捕获并记录到日志中。

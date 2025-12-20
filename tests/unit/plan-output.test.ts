@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { rm, readFile, stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { writeExplorationResult } from '../../src/plan/output.js'
-import type { ExplorationResult } from '../../src/plan/types.js'
+import { writeExplorationResult, writeTestPlan, buildMarkdownForTestCase } from '../../src/plan/output.js'
+import type { ExplorationResult, TestPlan, TestCasePlan } from '../../src/plan/types.js'
 
 describe('plan/output', () => {
   const testCwd = resolve(process.cwd(), 'tests', 'fixtures', 'plan-output-test')
@@ -199,6 +199,178 @@ describe('plan/output', () => {
       const lastEntry = JSON.parse(lines[1])
       expect(lastEntry.type).toBe('guardrail_triggered')
       expect(lastEntry.guardrail.code).toBe('MAX_PAGES')
+    })
+  })
+
+  describe('buildMarkdownForTestCase', () => {
+    it('should generate markdown with Preconditions and ordered Steps including Expected', () => {
+      const testCase: TestCasePlan = {
+        id: 'case-1',
+        name: 'Login with valid credentials',
+        type: 'form',
+        priority: 'p0',
+        relatedPageIds: ['login', 'dashboard'],
+        markdownPath: 'login/case-1.md',
+        preconditions: ['User has a valid account', 'Application base URL is reachable'],
+        steps: [
+          {
+            description: 'Open the login page',
+            expectedResult: 'Login form is visible',
+          },
+          {
+            description: 'Fill username {{USERNAME}} and password {{PASSWORD}} and submit',
+            expectedResult: 'User is redirected to dashboard',
+          },
+        ],
+      }
+
+      const markdown = buildMarkdownForTestCase(testCase)
+
+      expect(markdown).toContain('# Login with valid credentials')
+      expect(markdown).toContain('## Preconditions')
+      expect(markdown).toContain('- User has a valid account')
+      expect(markdown).toContain('## Steps')
+      expect(markdown).toMatch(/1\. Open the login page/)
+      expect(markdown).toMatch(/- Expected: Login form is visible/)
+      expect(markdown).toMatch(/2\. Fill username \{\{USERNAME}} and password \{\{PASSWORD}} and submit/)
+      expect(markdown).toMatch(/- Expected: User is redirected to dashboard/)
+    })
+
+    it('should provide default preconditions and steps when missing', () => {
+      const testCase: TestCasePlan = {
+        id: 'case-2',
+        name: 'Generic functional check',
+        type: 'functional',
+        priority: 'p1',
+        relatedPageIds: ['home'],
+        markdownPath: 'case-2.md',
+      }
+
+      const markdown = buildMarkdownForTestCase(testCase)
+
+      expect(markdown).toContain('## Preconditions')
+      expect(markdown).toContain('Environment is prepared and application is reachable.')
+      expect(markdown).toContain('## Steps')
+      expect(markdown).toContain('1. Execute the main user journey for this test case.')
+      expect(markdown).toContain('Expected: The application behaves as described in the test case name and type.')
+    })
+  })
+
+  describe('writeTestPlan', () => {
+    it('should write test-plan.json and markdown specs for cases', async () => {
+      const plan: TestPlan = {
+        runId: testRunId,
+        generatedAt: '2025-01-01T00:00:00.000Z',
+        configSnapshot: {
+          baseUrl: 'https://example.com',
+          maxDepth: 2,
+        },
+        flows: [],
+        cases: [
+          {
+            id: 'case-1',
+            name: 'Login with valid credentials',
+            type: 'form',
+            priority: 'p0',
+            relatedPageIds: ['login', 'dashboard'],
+            markdownPath: 'auth/login-success.md',
+            preconditions: ['User has a valid account'],
+            steps: [
+              {
+                description: 'Open login page and submit valid credentials',
+                expectedResult: 'User is redirected to dashboard',
+              },
+            ],
+          },
+        ],
+      }
+
+      const output = await writeTestPlan(plan, {
+        cwd: testCwd,
+        runId: testRunId,
+      })
+
+      expect(output.errors).toHaveLength(0)
+      expect(output.planPath).toBe('.autoqa/runs/test-run-123/plan/test-plan.json')
+      expect(output.specPaths).toHaveLength(1)
+      expect(output.specPaths[0]).toBe('.autoqa/runs/test-run-123/plan/specs/auth/login-success.md')
+
+      const planJsonPath = resolve(testCwd, '.autoqa', 'runs', testRunId, 'plan', 'test-plan.json')
+      const planContent = await readFile(planJsonPath, 'utf-8')
+      const parsedPlan = JSON.parse(planContent)
+
+      expect(parsedPlan.runId).toBe(testRunId)
+      expect(parsedPlan.cases).toHaveLength(1)
+      expect(parsedPlan.cases[0].name).toBe('Login with valid credentials')
+
+      const specAbsPath = resolve(testCwd, '.autoqa', 'runs', testRunId, 'plan', 'specs', 'auth', 'login-success.md')
+      const specContent = await readFile(specAbsPath, 'utf-8')
+      expect(specContent).toContain('# Login with valid credentials')
+      expect(specContent).toContain('## Preconditions')
+      expect(specContent).toContain('## Steps')
+    })
+
+    it('should prevent directory traversal in markdownPath', async () => {
+      const plan: TestPlan = {
+        runId: testRunId,
+        generatedAt: '2025-01-01T00:00:00.000Z',
+        configSnapshot: {
+          baseUrl: 'https://example.com',
+          maxDepth: 2,
+        },
+        flows: [],
+        cases: [
+          {
+            id: 'case-1',
+            name: 'Invalid path case',
+            type: 'functional',
+            priority: 'p2',
+            relatedPageIds: ['home'],
+            markdownPath: '../escape.md',
+          },
+        ],
+      }
+
+      const output = await writeTestPlan(plan, {
+        cwd: testCwd,
+        runId: testRunId,
+      })
+
+      expect(output.errors.length).toBeGreaterThan(0)
+      expect(output.specPaths).toHaveLength(0)
+    })
+
+    it('should sanitize runId for plan output similar to exploration output', async () => {
+      const plan: TestPlan = {
+        runId: 'test/../../../etc/passwd',
+        generatedAt: '2025-01-01T00:00:00.000Z',
+        configSnapshot: {
+          baseUrl: 'https://example.com',
+          maxDepth: 2,
+        },
+        flows: [],
+        cases: [
+          {
+            id: 'case-1',
+            name: 'Sanitized run id case',
+            type: 'functional',
+            priority: 'p2',
+            relatedPageIds: ['home'],
+            markdownPath: 'case-1.md',
+          },
+        ],
+      }
+
+      const unsafeRunId = 'test/../../../etc/passwd'
+      const output = await writeTestPlan(plan, {
+        cwd: testCwd,
+        runId: unsafeRunId,
+      })
+
+      expect(output.errors).toHaveLength(0)
+      expect(output.planPath).toContain('test_______etc_passwd')
+      expect(output.planPath).not.toContain('..')
+      expect(output.specPaths[0]).toContain('test_______etc_passwd')
     })
   })
 })

@@ -195,3 +195,50 @@ export type ExplorationElements = {
     forms: FormInfo[]
   }>
 }
+
+/**
+ * Test flow grouping for related test cases
+ * Based on Tech Spec: ts-7-agent-based-intelligent-planner.md#TestPlan
+ */
+export type FlowPlan = {
+  id: string
+  name: string
+  description?: string
+  /** Page ids that represent the main path of this flow */
+  pagePath?: string[]
+}
+
+/**
+ * Single test case definition for planning output
+ * Based on Tech Spec: ts-7-agent-based-intelligent-planner.md#TestCasePlan
+ */
+export type TestCasePlan = {
+  id: string
+  name: string
+  type: 'functional' | 'form' | 'navigation' | 'responsive' | 'boundary' | 'security'
+  priority: 'p0' | 'p1' | 'p2'
+  /** Related page ids from ExplorationGraph */
+  relatedPageIds: string[]
+  /** Markdown relative path under .autoqa/runs/<runId>/plan/specs/ */
+  markdownPath: string
+  /** High-level preconditions for this test case */
+  preconditions?: string[]
+  /** Ordered steps with explicit expected results */
+  steps?: Array<{
+    description: string
+    expectedResult: string
+  }>
+}
+
+/**
+ * Structured test plan produced by Planner Agent
+ * Based on Tech Spec: ts-7-agent-based-intelligent-planner.md#TestPlan
+ */
+export type TestPlan = {
+  runId: string
+  generatedAt: string
+  /** Effective configuration used for this plan */
+  configSnapshot: PlanConfig
+  flows: FlowPlan[]
+  cases: TestCasePlan[]
+}

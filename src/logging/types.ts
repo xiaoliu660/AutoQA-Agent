@@ -143,6 +143,33 @@ export type PlanExplorePageFailedEvent = LogEventBase & {
   error: string
 }
 
+export type PlanGenerateStartedEvent = LogEventBase & {
+  event: 'autoqa.plan.generate.started'
+  baseUrl: string
+  pageCount: number
+}
+
+export type PlanGenerateFinishedEvent = LogEventBase & {
+  event: 'autoqa.plan.generate.finished'
+  caseCount: number
+}
+
+export type PlanGenerateOrchestratorStartedEvent = LogEventBase & {
+  event: 'autoqa.plan.generate.orchestrator.started'
+  pageCount: number
+}
+
+export type PlanGenerateOrchestratorOutputErrorsEvent = LogEventBase & {
+  event: 'autoqa.plan.generate.orchestrator.output_errors'
+  errors: string[]
+}
+
+export type PlanGenerateOrchestratorFinishedEvent = LogEventBase & {
+  event: 'autoqa.plan.generate.orchestrator.finished'
+  caseCount: number
+  specCount: number
+}
+
 export type LogEvent =
   | RunStartedEvent
   | RunFinishedEvent
@@ -161,3 +188,8 @@ export type LogEvent =
   | PlanExplorePageStartedEvent
   | PlanExplorePageFinishedEvent
   | PlanExplorePageFailedEvent
+  | PlanGenerateStartedEvent
+  | PlanGenerateFinishedEvent
+  | PlanGenerateOrchestratorStartedEvent
+  | PlanGenerateOrchestratorOutputErrorsEvent
+  | PlanGenerateOrchestratorFinishedEvent

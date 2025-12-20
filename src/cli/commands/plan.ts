@@ -10,6 +10,7 @@ import { createBrowser } from '../../browser/create-browser.js'
 import { createLogger } from '../../logging/index.js'
 import { explore } from '../../plan/explore.js'
 import { writeExplorationResult } from '../../plan/output.js'
+import { generateTestPlan } from '../../plan/orchestrator.js'
 import type { PlanConfig, GuardrailConfig } from '../../plan/types.js'
 
 function validateDepth(value: string): number {
@@ -97,43 +98,178 @@ export function registerPlanCommand(program: Command): void {
         }
 
         // Report results
-        console.log(`\nExploration complete.`)
-        console.log(`Run ID: ${runId}`)
-        console.log(`\nArtifacts:`)
-        if (writeOutput.graphPath) console.log(`  Graph: ${writeOutput.graphPath}`)
-        if (writeOutput.elementsPath) console.log(`  Elements: ${writeOutput.elementsPath}`)
-        if (writeOutput.transcriptPath) console.log(`  Transcript: ${writeOutput.transcriptPath}`)
+        console.log(`\n✅ Exploration completed for runId: ${runId}`)
+        console.log(`📊 Pages visited: ${result.stats.pagesVisited}`)
+        console.log(`📄 Max depth reached: ${result.stats.maxDepthReached}`)
+        console.log(`📁 Results written to: .autoqa/runs/${runId}/plan-explore/`)
 
-        console.log(`\nStatistics:`)
-        console.log(`  Pages visited: ${result.stats.pagesVisited}`)
-        console.log(`  Elements found: ${result.stats.elementsFound}`)
-        console.log(`  Forms found: ${result.stats.formsFound}`)
-        console.log(`  Links found: ${result.stats.linksFound}`)
-        console.log(`  Max depth reached: ${result.stats.maxDepthReached}`)
-
-        if (result.guardrailTriggered) {
-          console.log(`\nGuardrail triggered: ${result.guardrailTriggered.code}`)
-          console.log(`  Limit: ${result.guardrailTriggered.limit}, Actual: ${result.guardrailTriggered.actual}`)
+        if (writeOutput.errors.length > 0) {
+          console.error(`\n⚠️ Errors occurred:`)
+          writeOutput.errors.forEach((e) => console.error(`  - ${e}`))
         }
-
-        if (result.error) {
-          console.error(`\nExploration error: ${result.error.message}`)
-          console.error(`  Stage: ${result.error.stage}`)
-          if (result.error.pageUrl) console.error(`  Page: ${result.error.pageUrl}`)
-          await logger.flush()
-          process.exit(1)
-        }
-
-        await logger.flush()
-        process.exit(0)
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
-        console.error(`Exploration failed: ${msg}`)
-        await logger.flush()
+      } catch (error) {
+        console.error(`❌ Exploration failed: ${error instanceof Error ? error.message : String(error)}`)
         process.exit(1)
       } finally {
-        if (browserResult) {
-          await browserResult.browser.close().catch(() => {})
+        if (browserResult?.close) {
+          await browserResult.close()
+        }
+      }
+    })
+
+  plan
+    .command('generate')
+    .description('Generate test plan and Markdown specs from exploration artifacts')
+    .requiredOption('--run-id <runId>', 'Exploration run ID to generate tests from')
+    .requiredOption('-u, --url <url>', 'Target application URL', validateUrl)
+    .option('--test-types <types>', 'Comma-separated list of test types (functional,form,navigation,responsive,boundary,security)')
+    .option('--max-agent-turns <number>', 'Maximum agent turns for planning', validatePositiveInt)
+    .action(async (options) => {
+      const runId = options.runId
+      
+      // Build config from options
+      const testTypes = options.testTypes
+        ? options.testTypes.split(',').map((t: string) => t.trim().toLowerCase())
+        : undefined
+
+      const guardrails: GuardrailConfig = {}
+      if (options.maxAgentTurns) guardrails.maxAgentTurnsPerRun = options.maxAgentTurns
+
+      const config: PlanConfig = {
+        baseUrl: options.url,
+        maxDepth: 3,
+        testTypes,
+        guardrails: Object.keys(guardrails).length > 0 ? guardrails : undefined,
+      }
+
+      const logger = createLogger({ runId, cwd: process.cwd(), debug: false, writeToFile: true })
+
+      try {
+        const result = await generateTestPlan({
+          runId,
+          config,
+          logger,
+          cwd: process.cwd(),
+        })
+
+        // Report results
+        console.log(`\n✅ Test plan generated for runId: ${runId}`)
+        console.log(`📋 Test cases created: ${result.plan.cases.length}`)
+        console.log(`📁 Test specs written to: .autoqa/runs/${runId}/plan/specs/`)
+
+        if (result.output.errors.length > 0) {
+          console.error(`\n⚠️ Errors occurred:`)
+          result.output.errors.forEach((e) => console.error(`  - ${e}`))
+        }
+      } catch (error) {
+        console.error(`❌ Test plan generation failed: ${error instanceof Error ? error.message : String(error)}`)
+        process.exit(1)
+      }
+    })
+
+  // Combined command: explore + generate
+  plan
+    .command('run')
+    .description('Run exploration and test case generation in sequence')
+    .requiredOption('-u, --url <url>', 'Target application URL', validateUrl)
+    .option('-d, --depth <number>', 'Maximum exploration depth (0-10)', validateDepth, 3)
+    .option('--max-pages <number>', 'Maximum pages to visit', validatePositiveInt)
+    .option('--max-agent-turns <number>', 'Maximum agent tool calls (guardrail)', validatePositiveInt)
+    .option('--max-snapshots <number>', 'Maximum snapshots to capture (guardrail)', validatePositiveInt)
+    .option('--test-types <types>', 'Comma-separated list of test types')
+    .option('--login-url <url>', 'Login page URL (optional)', validateUrl)
+    .option('--username <username>', 'Login username (optional)')
+    .option('--password <password>', 'Login password (optional)')
+    .option('--headless', 'Run browser in headless mode', false)
+    .action(async (options) => {
+      const runId = randomUUID()
+      const logger = createLogger({ runId, cwd: process.cwd(), debug: false, writeToFile: true })
+
+      // Parse test types if provided
+      const testTypes = options.testTypes
+        ? options.testTypes.split(',').map((t: string) => t.trim().toLowerCase())
+        : undefined
+
+      // Build guardrail config
+      const guardrails: GuardrailConfig = {}
+      if (options.maxAgentTurns) guardrails.maxAgentTurnsPerRun = options.maxAgentTurns
+      if (options.maxSnapshots) guardrails.maxSnapshotsPerRun = options.maxSnapshots
+      if (options.maxPages) guardrails.maxPagesPerRun = options.maxPages
+
+      // Build config following Tech Spec structure
+      const config: PlanConfig = {
+        baseUrl: options.url,
+        maxDepth: options.depth,
+        maxPages: options.maxPages,
+        testTypes,
+        guardrails: Object.keys(guardrails).length > 0 ? guardrails : undefined,
+        auth: options.loginUrl ? {
+          loginUrl: options.loginUrl,
+          username: options.username,
+          password: options.password,
+        } : undefined,
+      }
+
+      let browserResult = null
+
+      try {
+        // Step 1: Exploration
+        console.log(`🔍 Starting exploration...`)
+        browserResult = await createBrowser({ headless: options.headless })
+
+        const explorationResult = await explore({
+          config,
+          browser: browserResult.browser,
+          logger,
+          runId,
+          cwd: process.cwd(),
+        })
+
+        const explorationOutput = await writeExplorationResult(explorationResult, { runId, cwd: process.cwd() })
+
+        if (explorationOutput.errors.length > 0) {
+          console.error(`\n⚠️ Exploration errors:`)
+          explorationOutput.errors.forEach((e) => console.error(`  - ${e}`))
+        }
+
+        console.log(`\n✅ Exploration completed`)
+        console.log(`📊 Pages visited: ${explorationResult.stats.pagesVisited}`)
+        console.log(`📁 Exploration results: .autoqa/runs/${runId}/plan-explore/`)
+
+        // Step 2: Generate test cases
+        console.log(`\n📋 Generating test cases...`)
+        const testPlanResult = await generateTestPlan({
+          runId,
+          config,
+          logger,
+          cwd: process.cwd(),
+        })
+
+        console.log(`\n✅ Test plan generated`)
+        console.log(`📝 Test cases created: ${testPlanResult.plan.cases.length}`)
+        console.log(`📁 Test specs: .autoqa/runs/${runId}/plan/specs/`)
+
+        if (testPlanResult.output.errors.length > 0) {
+          console.error(`\n⚠️ Test plan errors:`)
+          testPlanResult.output.errors.forEach((e) => console.error(`  - ${e}`))
+        }
+
+        // Summary
+        console.log(`\n🎉 Plan command completed successfully!`)
+        console.log(`Run ID: ${runId}`)
+        console.log(`Total artifacts:`)
+        if (explorationOutput.graphPath) console.log(`  - Exploration graph: ${explorationOutput.graphPath}`)
+        if (explorationOutput.elementsPath) console.log(`  - Elements: ${explorationOutput.elementsPath}`)
+        if (explorationOutput.transcriptPath) console.log(`  - Transcript: ${explorationOutput.transcriptPath}`)
+        console.log(`  - Test plan: .autoqa/runs/${runId}/plan/test-plan.json`)
+        console.log(`  - Test specs: ${testPlanResult.output.specPaths.length} files`)
+
+      } catch (error) {
+        console.error(`❌ Plan command failed: ${error instanceof Error ? error.message : String(error)}`)
+        process.exit(1)
+      } finally {
+        if (browserResult?.close) {
+          await browserResult.close()
         }
       }
     })

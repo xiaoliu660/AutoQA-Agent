@@ -6,13 +6,15 @@
  * - explore-transcript.jsonl: Agent tool calls and thinking
  */
 import { mkdir, writeFile, appendFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { resolve, dirname } from 'node:path'
 
 import type {
   ExplorationResult,
   ExplorationGraph,
   ExplorationElements,
   TranscriptEntry,
+  TestPlan,
+  TestCasePlan,
 } from './types.js'
 
 export type WriteExplorationResultOptions = {
@@ -180,6 +182,126 @@ export async function writeExplorationResult(
     output.transcriptPath = transcriptResult.path
   } else if (transcriptResult.error) {
     errors.push(transcriptResult.error)
+  }
+
+  return output
+}
+
+export type WriteTestPlanOptions = {
+  cwd?: string
+  runId: string
+}
+
+export type WriteTestPlanOutput = {
+  planPath?: string
+  specPaths: string[]
+  errors: string[]
+}
+
+export function buildMarkdownForTestCase(testCase: TestCasePlan): string {
+  const lines: string[] = []
+
+  lines.push(`# ${testCase.name}`)
+  lines.push('')
+  lines.push(`Type: ${testCase.type} | Priority: ${testCase.priority.toUpperCase()}`)
+  lines.push('')
+
+  lines.push('## Preconditions')
+  const preconditions = testCase.preconditions && testCase.preconditions.length > 0
+    ? testCase.preconditions
+    : ['Environment is prepared and application is reachable.']
+  for (const p of preconditions) {
+    lines.push(`- ${p}`)
+  }
+
+  lines.push('')
+  lines.push('## Steps')
+  const steps = testCase.steps && testCase.steps.length > 0
+    ? testCase.steps
+    : []
+
+  if (steps.length === 0) {
+    lines.push('1. Execute the main user journey for this test case.')
+    lines.push('   - Expected: The application behaves as described in the test case name and type.')
+  } else {
+    steps.forEach((step, index) => {
+      const n = index + 1
+      lines.push(`${n}. ${step.description}`)
+      const expected = step.expectedResult.trim()
+      if (expected.length > 0) {
+        lines.push(`   - Expected: ${expected}`)
+      }
+    })
+  }
+
+  lines.push('')
+  return lines.join('\n')
+}
+
+export async function writeTestPlan(
+  plan: TestPlan,
+  options: WriteTestPlanOptions,
+): Promise<WriteTestPlanOutput> {
+  const cwd = options.cwd ?? process.cwd()
+  const runId = sanitizePathSegment(options.runId)
+  const baseDir = resolve(cwd, '.autoqa', 'runs', runId, 'plan')
+  const specsDir = resolve(baseDir, 'specs')
+  const errors: string[] = []
+  const specPaths: string[] = []
+  const output: WriteTestPlanOutput = { errors, specPaths }
+
+  try {
+    await mkdir(specsDir, { recursive: true })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    errors.push(`Failed to create plan output directory: ${msg}`)
+    return output
+  }
+
+  const planAbsPath = resolve(baseDir, 'test-plan.json')
+  const planRelPath = `.autoqa/runs/${runId}/plan/test-plan.json`
+
+  try {
+    const content = JSON.stringify(plan, null, 2)
+    await writeFile(planAbsPath, content, { encoding: 'utf-8', mode: 0o600 })
+    output.planPath = planRelPath
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    errors.push(`Failed to write test-plan.json: ${msg}`)
+  }
+
+  for (const testCase of plan.cases) {
+    const rawRel = (testCase.markdownPath ?? '').trim()
+    const safeRel = rawRel.length > 0
+      ? rawRel
+      : `${sanitizePathSegment(`${testCase.type}-${testCase.priority}-${testCase.id}`)}.md`
+    if (safeRel.includes('..')) {
+      errors.push(`Invalid markdownPath for case ${testCase.id}: must not contain '..'`)
+      continue
+    }
+
+    const specAbsPath = resolve(specsDir, safeRel)
+    const specDir = dirname(specAbsPath)
+
+    try {
+      if (specDir !== specsDir) {
+        await mkdir(specDir, { recursive: true })
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      errors.push(`Failed to create directory for spec ${safeRel}: ${msg}`)
+      continue
+    }
+
+    try {
+      const markdown = buildMarkdownForTestCase(testCase)
+      await writeFile(specAbsPath, markdown, { encoding: 'utf-8', mode: 0o600 })
+      const relPath = `.autoqa/runs/${runId}/plan/specs/${safeRel}`
+      specPaths.push(relPath)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      errors.push(`Failed to write spec ${safeRel}: ${msg}`)
+    }
   }
 
   return output

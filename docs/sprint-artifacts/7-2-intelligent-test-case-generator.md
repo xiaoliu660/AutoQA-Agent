@@ -1,6 +1,6 @@
 # Story 7.2: Agent 驱动的智能测试用例生成器
 
-Status: draft
+Status: in-progress
 
 ## Story
 
@@ -38,24 +38,24 @@ so that 我可以快速获得高质量的测试计划，而不需要为每种页
 
 ## Tasks / Subtasks
 
-- [ ] 设计 `TestPlan` 与 `TestCasePlan` 数据模型（AC: 1, 2, 3, 4）  
-  - [ ] 在 `src/plan/types.ts` 中增加 `TestPlan`、`TestCasePlan`、`FlowPlan` 等类型定义  
-  - [ ] 为每个测试用例记录类型（功能/表单/导航/响应式/边界/安全性）、优先级与关联页面 ID  
-  - [ ] 确保该模型既能驱动 Markdown 渲染，也可作为未来“直接导出 Playwright 测试”的输入
+- [x] 设计 `TestPlan` 与 `TestCasePlan` 数据模型（AC: 1, 2, 3, 4）
+  - [x] 在 `src/plan/types.ts` 中增加 `TestPlan`、`TestCasePlan`、`FlowPlan` 等类型定义
+  - [x] 为每个测试用例记录类型（功能/表单/导航/响应式/边界/安全性）、优先级与关联页面 ID
+  - [x] 确保该模型既能驱动 Markdown 渲染，也可作为未来"直接导出 Playwright 测试"的输入
 
-- [ ] 实现基于 Agent 的用例规划逻辑（AC: 1, 3, 4）  
-  - [ ] 在 `src/plan/orchestrator.ts` 中增加 `generateTestPlan` 入口，负责：读取探索产物、构造 Agent 上下文、执行多轮工具调用  
-  - [ ] 在 Planner Agent 的工具集中增加专门用于“规划”的工具（如 `list_known_pages`、`get_page_snapshot(pageId)`、`propose_test_cases_for_page`）  
-  - [ ] 在 `docs/sprint-artifacts/ts-7-agent-based-intelligent-planner.md` 中约定这些工具的输入输出结构
+- [x] 实现基于 Agent 的用例规划逻辑（AC: 1, 3, 4）
+  - [x] 在 `src/plan/orchestrator.ts` 中增加 `generateTestPlan` 入口，负责：读取探索产物、构造 Agent 上下文、执行多轮工具调用
+  - [x] 在 Planner Agent 的工具集中增加专门用于"规划"的工具（如 `list_known_pages`、`get_page_snapshot(pageId)`、`propose_test_cases_for_page`）
+  - [x] 在 `docs/sprint-artifacts/ts-7-agent-based-intelligent-planner.md` 中约定这些工具的输入输出结构
 
-- [ ] Markdown 渲染与输出（AC: 2）  
-  - [ ] 在 `src/plan/output.ts` 中实现从 `TestPlan` 到 Markdown specs 的渲染逻辑，输出到 `.autoqa/runs/<runId>/plan/specs/`  
-  - [ ] 确保输出的文件满足 `autoqa run` 的最低结构要求（Preconditions + 有序步骤 + 断言描述）  
-  - [ ] 根据 `TestCasePlan` 中的类型/优先级，为文件命名与添加适当的标题/标签
+- [x] Markdown 渲染与输出（AC: 2）
+  - [x] 在 `src/plan/output.ts` 中实现从 `TestPlan` 到 Markdown specs 的渲染逻辑，输出到 `.autoqa/runs/<runId>/plan/specs/`
+  - [x] 确保输出的文件满足 `autoqa run` 的最低结构要求（Preconditions + 有序步骤 + 断言描述）
+  - [x] 根据 `TestCasePlan` 中的类型/优先级，为文件命名与添加适当的标题/标签
 
-- [ ] 测试与回归（AC: 1–4）  
-  - [ ] 为规划逻辑增加单元测试，覆盖不同页面组合和配置下的 plan 结果  
-  - [ ] 增加端到端测试：从一个 demo 应用跑 `autoqa plan explore` + 用例生成，再用 `autoqa run` 执行生成的 specs，验证可运行性  
+- [ ] 测试与回归（AC: 1–4）
+  - [x] 为规划逻辑增加单元测试，覆盖不同页面组合和配置下的 plan 结果
+  - [ ] 增加端到端测试：从一个 demo 应用跑 `autoqa plan explore` + 用例生成，再用 `autoqa run` 执行生成的 specs，验证可运行性
   - [ ] 为典型业务模式（搜索/登录/注册）设计最小 demo，以验证 Agent 能识别模式并生成对应场景
 
 ## Dev Notes
@@ -90,20 +90,63 @@ Cascade
 
 ### Implementation Plan
 
-TBD
+已实现基于 Agent 的测试用例生成核心功能：
+1. ✅ 定义了完整的数据模型（TestPlan、TestCasePlan、FlowPlan）
+2. ✅ 实现了 orchestrator 编排逻辑
+3. ✅ 集成了 Claude Agent SDK
+4. ✅ 创建了专用的 MCP 工具集
+5. ✅ 实现了 Markdown 渲染输出
+6. ✅ 添加了 CLI 命令（generate、run）
+7. ⚠️ 需要补充 e2e 测试和业务模式示例
 
 ### Debug Log References
 
-TBD（待在实现阶段根据实际日志事件名补充）
+- `autoqa.plan.generate.started` - 开始生成测试计划
+- `autoqa.plan.generate.finished` - 测试计划生成完成
+- `autoqa.plan.generate.orchestrator.started` - 编排器开始工作
+- `autoqa.plan.generate.orchestrator.finished` - 编排器完成工作
+- `autoqa.plan.generate.orchestrator.output_errors` - 输出错误日志
 
 ### Completion Notes List
 
-TBD
+1. **CLI 命令已添加**:
+   - `autoqa plan explore` - 探索应用结构
+   - `autoqa plan generate` - 基于探索结果生成测试用例
+   - `autoqa plan run` - 一键完成探索+生成
+
+2. **Agent 决策机制**: TypeScript 仅传递上下文，具体测试类型由 Agent 自主决定
+
+3. **输出格式**: 生成的 Markdown 符合 AutoQA 结构，使用占位符而非敏感数据
+
+4. **测试覆盖**: 支持 functional、form、navigation、responsive、boundary、security 六种测试类型
+
+5. **待完成事项**:
+   - 添加 e2e 测试（使用 demo 应用）
+   - 创建典型业务模式示例（搜索/登录/注册）
+   - 优化 Agent prompt 以提高业务模式识别能力
 
 ### File List
 
-TBD
+**Modified Files:**
+- `src/cli/commands/plan.ts` - 添加了 `generate` 和 `run` 子命令
+- `src/plan/types.ts` - 定义了 TestPlan、TestCasePlan、FlowPlan 等数据模型
+- `src/plan/orchestrator.ts` - 实现了测试计划生成的编排逻辑
+- `src/plan/plan-agent.ts` - 集成了 Claude Agent SDK 进行智能规划
+- `src/plan/planner-tools-mcp.ts` - 创建了 MCP 工具供 Agent 使用
+- `src/plan/output.ts` - 实现了 Markdown 渲染功能
+- `src/logging/types.ts` - 扩展了日志类型以支持规划功能
+- `tests/unit/plan-agent.test.ts` - 为 plan-agent 添加了单元测试
+- `tests/unit/cli-plan-explore.test.ts` - 更新了 CLI 探索测试
+- `tests/unit/plan-output.test.ts` - 添加了输出功能的测试
+
+**New Files:**
+- `src/plan/orchestrator.ts` - 新增文件
+- `src/plan/plan-agent.ts` - 新增文件
+- `src/plan/planner-tools-mcp.ts` - 新增文件
+- `tests/unit/plan-agent.test.ts` - 新增文件
 
 ### Change Log
 
 - 2025-12-20: 初始创建 Story 7.2 文档（Agent 驱动的智能测试用例生成器），尚未实现
+- 2025-12-20: 实现 Agent 驱动的测试用例生成核心功能，包括数据模型、编排器、Agent 集成、MCP 工具、CLI 命令等
+- 2025-12-20: 添加 `autoqa plan generate` 和 `autoqa plan run` 命令，支持从探索结果生成 Markdown 测试用例

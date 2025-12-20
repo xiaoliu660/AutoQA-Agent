@@ -89,5 +89,32 @@ describe('cli/commands/plan', () => {
       expect(maxAgentTurnsOption).toBeDefined()
       expect(maxSnapshotsOption).toBeDefined()
     })
+
+    it('should register generate subcommand', () => {
+      const program = new Command()
+      registerPlanCommand(program)
+
+      const planCommand = program.commands.find((cmd) => cmd.name() === 'plan')
+      const generateCommand = planCommand?.commands.find((cmd) => cmd.name() === 'generate')
+
+      expect(generateCommand).toBeDefined()
+      expect(generateCommand?.description()).toBe('Generate test plan and Markdown specs from exploration artifacts')
+    })
+
+    it('should have required run-id and url options on generate', () => {
+      const program = new Command()
+      registerPlanCommand(program)
+
+      const planCommand = program.commands.find((cmd) => cmd.name() === 'plan')
+      const generateCommand = planCommand?.commands.find((cmd) => cmd.name() === 'generate')
+
+      const runIdOption = generateCommand?.options.find((opt) => opt.long === '--run-id')
+      const urlOption = generateCommand?.options.find((opt) => opt.long === '--url')
+
+      expect(runIdOption).toBeDefined()
+      expect(runIdOption?.required).toBe(true)
+      expect(urlOption).toBeDefined()
+      expect(urlOption?.required).toBe(true)
+    })
   })
 })
