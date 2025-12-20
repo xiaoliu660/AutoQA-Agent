@@ -93,9 +93,9 @@ Systematically explore the web application to discover:
 4. **Depth control**: Track how many clicks deep you are from the start page. Stop exploring paths deeper than ${config.maxDepth ?? 3} levels.
 5. **Avoid duplicates**: Don't revisit pages you've already explored
 
-## Output Format
+## IMPORTANT: Final Output Required
 
-After exploring, provide a structured summary in this EXACT JSON format:
+You MUST end your exploration by providing a JSON summary in this EXACT format:
 
 \`\`\`json
 {
@@ -127,6 +127,8 @@ After exploring, provide a structured summary in this EXACT JSON format:
 }
 \`\`\`
 
+ALWAYS provide the JSON output at the end of your response, even if you encountered errors or couldn't fully explore the site.
+
 ## Rules
 
 - Use ONLY the provided browser tools (snapshot/navigate/click/fill/select_option/scroll/wait)
@@ -134,7 +136,7 @@ After exploring, provide a structured summary in this EXACT JSON format:
 - Stay within the same domain - don't follow external links
 - Be thorough but efficient - don't click the same element twice
 - If you encounter an error, note it and continue exploring other paths
-- When you've explored all reachable pages up to the depth limit, output your findings
+- When you've explored all reachable pages up to the depth limit, output your findings in the required JSON format
 
 ## Begin Exploration
 
@@ -148,6 +150,31 @@ function safeStringify(value: unknown): string {
   } catch {
     return String(value)
   }
+}
+
+function safeString(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value == null) return ''
+  return safeStringify(value)
+}
+
+function getAssistantContent(message: any): unknown {
+  if (message && typeof message === 'object') {
+    if ('content' in message) return (message as any).content
+    if ((message as any).message && typeof (message as any).message === 'object' && 'content' in (message as any).message) {
+      return (message as any).message.content
+    }
+  }
+  return undefined
+}
+
+function getUserContent(message: any): unknown {
+  if (message && typeof message === 'object') {
+    if ((message as any).message && typeof (message as any).message === 'object' && 'content' in (message as any).message) {
+      return (message as any).message.content
+    }
+  }
+  return undefined
 }
 
 function parseExplorationResult(agentOutput: string): {
@@ -185,6 +212,28 @@ function parseExplorationResult(agentOutput: string): {
       return null
     }
 
+    // Transform pages to match our type definitions
+    // Agent outputs "elements" but our type expects "elementSummary"
+    if (result.pages && Array.isArray(result.pages)) {
+      result.pages = result.pages.map((page: any) => {
+        if (page.elements && Array.isArray(page.elements)) {
+          // Convert "elements" to "elementSummary"
+          page.elementSummary = page.elements.map((el: any) => ({
+            id: el.id,
+            kind: el.kind,
+            text: el.text,
+            href: el.href,
+            inputType: el.type,
+            name: el.name,
+            locatorCandidates: el.selector ? [{ selector: el.selector }] : undefined
+          }))
+          // Remove the "elements" field after conversion
+          delete page.elements
+        }
+        return page
+      })
+    }
+
     return result
   } catch (error) {
     console.error('Failed to parse exploration result JSON:', error)
@@ -199,6 +248,7 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
   const transcript: TranscriptEntry[] = []
   let turnCount = 0
   let snapshotCount = 0
+  let messageCount = 0
   let guardrailTriggered: GuardrailTrigger | undefined
   let lastError: Error | undefined
 
@@ -261,7 +311,7 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
       prompt,
       options: {
         maxTurns: guardrailLimits.maxAgentTurns,
-        tools: EXPLORE_ALLOWED_TOOLS,
+        tools: [],
         mcpServers: {
           browser: server,
         },
@@ -274,16 +324,15 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
       console.error('[explore] Starting to iterate over response...')
     }
 
-    let messageCount = 0
     for await (const message of response as any) {
       messageCount++
       turnCount++
 
-      if (debug && messageCount <= 5) {
-        console.error(`[explore] Message ${messageCount}:`, JSON.stringify(message, null, 2))
+      if (debug) {
+        console.error(`[explore] Message ${messageCount} type: ${message.type}`)
       }
 
-      // Check guardrails
+      // Check guardrails on overall agent turns
       if (turnCount >= guardrailLimits.maxAgentTurns) {
         guardrailTriggered = {
           code: 'MAX_AGENT_TURNS',
@@ -303,24 +352,33 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
         break
       }
 
+      // New-style Agent SDK message handling
       if (message?.type === 'assistant') {
-        const content = message?.content
-        if (Array.isArray(content)) {
+        const content = getAssistantContent(message)
+        let thinkingText = ''
+
+        if (typeof content === 'string') {
+          agentOutput += content + '\n'
+          thinkingText += content + '\n'
+          if (debug) {
+            process.stderr.write(`[explore] Assistant text (${content.length} chars)\n`)
+          }
+        } else if (Array.isArray(content)) {
           for (const block of content) {
             if (block?.type === 'text') {
-              const text = block?.text ?? ''
+              const text = block.text ?? ''
               agentOutput += text + '\n'
+              thinkingText += text + '\n'
               if (debug) {
-                process.stderr.write(`[explore] ${text.slice(0, 200)}\n`)
+                process.stderr.write(`[explore] Text block (${text.length} chars): ${text.slice(0, 200)}\n`)
               }
             }
 
             if (block?.type === 'tool_use') {
-              const toolName = block?.name ?? ''
+              const toolName = safeString(block?.name)
               const toolInput = block?.input ?? {}
 
-              // Track snapshots for guardrail
-              if (toolName.includes('snapshot')) {
+              if (toolName === 'mcp__browser__snapshot') {
                 snapshotCount++
                 if (snapshotCount >= guardrailLimits.maxSnapshots) {
                   guardrailTriggered = {
@@ -338,11 +396,9 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
                     limit: guardrailLimits.maxSnapshots,
                     actual: snapshotCount,
                   })
-                  break
                 }
               }
 
-              // Record tool call in transcript
               transcript.push({
                 timestamp: new Date().toISOString(),
                 runId,
@@ -352,36 +408,142 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
               })
 
               if (debug) {
-                process.stderr.write(`[explore] tool_use=${toolName} input=${safeStringify(toolInput).slice(0, 200)}\n`)
+                process.stderr.write(
+                  `[explore] tool_use=${toolName} input=${safeStringify(toolInput).slice(0, 200)}\n`,
+                )
               }
             }
           }
         }
+
+        if (thinkingText.trim().length > 0) {
+          transcript.push({
+            timestamp: new Date().toISOString(),
+            runId,
+            type: 'agent_thinking',
+            thinking: thinkingText.slice(0, 1000),
+          })
+        }
+
+        continue
+      }
+
+      if (message?.type === 'tool_call') {
+        const toolName = (message as any).tool_name ?? ''
+        const toolInput = (message as any).input ?? {}
+
+        // Track snapshots for guardrail
+        if (toolName === 'mcp__browser__snapshot') {
+          snapshotCount++
+          if (snapshotCount >= guardrailLimits.maxSnapshots) {
+            guardrailTriggered = {
+              code: 'MAX_SNAPSHOTS',
+              limit: guardrailLimits.maxSnapshots,
+              actual: snapshotCount,
+              triggeredAt: new Date().toISOString(),
+            }
+            logger.log({
+              event: 'autoqa.guardrail.triggered',
+              runId,
+              specPath: 'explore',
+              stepIndex: null,
+              code: 'MAX_SNAPSHOTS',
+              limit: guardrailLimits.maxSnapshots,
+              actual: snapshotCount,
+            })
+          }
+        }
+
+        // Record tool call in transcript
+        transcript.push({
+          timestamp: new Date().toISOString(),
+          runId,
+          type: 'tool_call',
+          toolName,
+          toolInput,
+        })
+
+        if (debug) {
+          process.stderr.write(`[explore] tool_call=${toolName} input=${safeStringify(toolInput).slice(0, 200)}\n`)
+        }
+        continue
+      }
+
+      if (message?.type === 'tool_result') {
+        const isError = Boolean((message as any).is_error)
+        const rawResult = (message as any).result
+        const resultText = safeStringify(rawResult).slice(0, 500)
+
+        transcript.push({
+          timestamp: new Date().toISOString(),
+          runId,
+          type: 'tool_result',
+          isError,
+          result: resultText,
+        })
+
+        if (debug) {
+          process.stderr.write(`[explore] tool_result error=${isError} ${resultText.slice(0, 100)}\n`)
+        }
+        continue
       }
 
       if (message?.type === 'user') {
-        const content = message?.content
+        const content = getUserContent(message)
         if (Array.isArray(content)) {
           for (const block of content) {
             if (block?.type === 'tool_result') {
               const isError = Boolean(block?.is_error)
-              const resultText = String(block?.content ?? '').slice(0, 500)
+              const text = safeString(block?.content ?? '').slice(0, 500)
 
-              // Record tool result in transcript
               transcript.push({
                 timestamp: new Date().toISOString(),
                 runId,
                 type: 'tool_result',
                 isError,
-                result: resultText,
+                result: text,
               })
 
               if (debug) {
-                process.stderr.write(`[explore] tool_result error=${isError} ${resultText.slice(0, 100)}\n`)
+                process.stderr.write(
+                  `[explore] tool_result (user block) error=${isError} ${text.slice(0, 100)}\n`,
+                )
               }
             }
           }
         }
+        continue
+      }
+
+      if (message?.type === 'result') {
+        if (message.result) {
+          agentOutput += message.result
+          if (debug) {
+            console.error(`[explore] Result content added to output (${message.result.length} chars)`)
+            console.error(`[explore] Result preview: ${message.result.slice(0, 500)}`)
+          }
+        }
+        if (message.text) {
+          agentOutput += message.text
+          if (debug) {
+            console.error(`[explore] Result text added to output (${message.text.length} chars)`)
+          }
+        }
+        continue
+      }
+
+      if (debug && message?.type === 'system') {
+        console.error(`[explore] system message: ${safeStringify(message)}`)
+        continue
+      }
+
+      if (debug && message?.type === 'error') {
+        console.error(`[explore] error message: ${safeStringify(message)}`)
+        continue
+      }
+
+      if (debug) {
+        console.error(`[explore] Unhandled message type: ${message?.type}`)
       }
     }
   } catch (err) {
@@ -396,10 +558,23 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
 
   const finishedAt = new Date().toISOString()
 
+  // Debug: Check if we have any final messages or results
+  if (debug) {
+    console.error(`[explore] Finished iterating over response`)
+    console.error(`[explore] Total messages processed: ${messageCount}`)
+    console.error(`[explore] Total turns processed: ${turnCount}`)
+    console.error(`[explore] Last error: ${lastError?.message || 'None'}`)
+  }
+
   // Debug: Log agent output
-  if (debug || !agentOutput) {
-    console.error(`[explore] Agent output length: ${agentOutput.length}`)
-    console.error(`[explore] Agent output preview: ${agentOutput.slice(0, 500)}`)
+  console.error(`[explore] Agent output length: ${agentOutput.length}`)
+  if (agentOutput.length > 0) {
+    console.error(`[explore] Agent output preview (first 1000 chars):`)
+    console.error(agentOutput.slice(0, 1000))
+    console.error(`[explore] Agent output preview (last 500 chars):`)
+    console.error(agentOutput.slice(-500))
+  } else {
+    console.error(`[explore] No agent output collected!`)
   }
 
   // Parse the agent's exploration result
