@@ -155,22 +155,39 @@ function parseExplorationResult(agentOutput: string): {
   edges: NavigationEdge[]
   loginStatus?: { attempted: boolean; ok: boolean }
 } | null {
+  let jsonStr = ''
+
   // Try to extract JSON from the agent's output
   const jsonMatch = agentOutput.match(/```json\s*([\s\S]*?)\s*```/)
-  if (!jsonMatch) {
+  if (jsonMatch) {
+    jsonStr = jsonMatch[1]
+  } else {
     // Try to find raw JSON object
     const rawMatch = agentOutput.match(/\{[\s\S]*"pages"[\s\S]*\}/)
-    if (!rawMatch) return null
-    try {
-      return JSON.parse(rawMatch[0])
-    } catch {
+    if (!rawMatch) {
+      console.error('Failed to extract JSON from agent output:', agentOutput.substring(0, 500))
       return null
     }
+    jsonStr = rawMatch[0]
   }
 
   try {
-    return JSON.parse(jsonMatch[1])
-  } catch {
+    const result = JSON.parse(jsonStr)
+
+    // Validate required structure
+    if (!result || typeof result !== 'object') {
+      console.error('Invalid result structure: not an object')
+      return null
+    }
+
+    if (!Array.isArray(result.pages)) {
+      console.error('Invalid result structure: pages is not an array')
+      return null
+    }
+
+    return result
+  } catch (error) {
+    console.error('Failed to parse exploration result JSON:', error)
     return null
   }
 }
@@ -298,6 +315,7 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
                     limit: guardrailLimits.maxSnapshots,
                     actual: snapshotCount,
                   })
+                  break
                 }
               }
 

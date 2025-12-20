@@ -50,6 +50,26 @@ async function writeExplorationGraph(
   const relPath = `.autoqa/runs/${runId}/plan-explore/${fileName}`
 
   try {
+    // Validate graph structure
+    if (!graph || typeof graph !== 'object') {
+      return { error: 'Invalid graph: not an object' }
+    }
+
+    if (!graph.pages || !Array.isArray(graph.pages)) {
+      return { error: 'Invalid graph: pages array is required' }
+    }
+
+    if (!graph.edges || !Array.isArray(graph.edges)) {
+      return { error: 'Invalid graph: edges array is required' }
+    }
+
+    // Validate each page
+    for (const page of graph.pages) {
+      if (!page.id || !page.url) {
+        return { error: 'Invalid page: missing required id or url' }
+      }
+    }
+
     const content = JSON.stringify(graph, null, 2)
     await writeFile(absPath, content, { encoding: 'utf-8', mode: 0o600 })
     return { path: relPath }
