@@ -10,49 +10,45 @@ describe('cli/commands/plan', () => {
 
       const planCommand = program.commands.find((cmd) => cmd.name() === 'plan')
       expect(planCommand).toBeDefined()
-      expect(planCommand?.description()).toBe('Plan and explore test scenarios (default: run full exploration + generation)')
+      expect(planCommand?.description()).toBe('Run full test planning: exploration + test case generation')
     })
 
-    it('should register explore subcommand', () => {
+    it('should register plan-explore command', () => {
       const program = new Command()
       registerPlanCommand(program)
 
-      const planCommand = program.commands.find((cmd) => cmd.name() === 'plan')
-      const exploreCommand = planCommand?.commands.find((cmd) => cmd.name() === 'explore')
+      const exploreCommand = program.commands.find((cmd) => cmd.name() === 'plan-explore')
 
       expect(exploreCommand).toBeDefined()
-      expect(exploreCommand?.description()).toBe('Explore a web application and generate page structure')
+      expect(exploreCommand?.description()).toBe('Explore a web application and generate page structure (exploration only)')
     })
 
-    it('should have required url option', () => {
+    it('should have required url option on plan-explore', () => {
       const program = new Command()
       registerPlanCommand(program)
 
-      const planCommand = program.commands.find((cmd) => cmd.name() === 'plan')
-      const exploreCommand = planCommand?.commands.find((cmd) => cmd.name() === 'explore')
+      const exploreCommand = program.commands.find((cmd) => cmd.name() === 'plan-explore')
 
       const urlOption = exploreCommand?.options.find((opt) => opt.long === '--url')
       expect(urlOption).toBeDefined()
       expect(urlOption?.required).toBe(true)
     })
 
-    it('should have optional depth option with default value', () => {
+    it('should have optional depth option on plan-explore', () => {
       const program = new Command()
       registerPlanCommand(program)
 
-      const planCommand = program.commands.find((cmd) => cmd.name() === 'plan')
-      const exploreCommand = planCommand?.commands.find((cmd) => cmd.name() === 'explore')
+      const exploreCommand = program.commands.find((cmd) => cmd.name() === 'plan-explore')
 
       const depthOption = exploreCommand?.options.find((opt) => opt.long === '--depth')
       expect(depthOption).toBeDefined()
     })
 
-    it('should have login-related options', () => {
+    it('should have login-related options on plan-explore', () => {
       const program = new Command()
       registerPlanCommand(program)
 
-      const planCommand = program.commands.find((cmd) => cmd.name() === 'plan')
-      const exploreCommand = planCommand?.commands.find((cmd) => cmd.name() === 'explore')
+      const exploreCommand = program.commands.find((cmd) => cmd.name() === 'plan-explore')
 
       const loginUrlOption = exploreCommand?.options.find((opt) => opt.long === '--login-url')
       const usernameOption = exploreCommand?.options.find((opt) => opt.long === '--username')
@@ -63,23 +59,21 @@ describe('cli/commands/plan', () => {
       expect(passwordOption).toBeDefined()
     })
 
-    it('should have headless option', () => {
+    it('should have headless option on plan-explore', () => {
       const program = new Command()
       registerPlanCommand(program)
 
-      const planCommand = program.commands.find((cmd) => cmd.name() === 'plan')
-      const exploreCommand = planCommand?.commands.find((cmd) => cmd.name() === 'explore')
+      const exploreCommand = program.commands.find((cmd) => cmd.name() === 'plan-explore')
 
       const headlessOption = exploreCommand?.options.find((opt) => opt.long === '--headless')
       expect(headlessOption).toBeDefined()
     })
 
-    it('should have guardrail options', () => {
+    it('should have guardrail options on plan-explore', () => {
       const program = new Command()
       registerPlanCommand(program)
 
-      const planCommand = program.commands.find((cmd) => cmd.name() === 'plan')
-      const exploreCommand = planCommand?.commands.find((cmd) => cmd.name() === 'explore')
+      const exploreCommand = program.commands.find((cmd) => cmd.name() === 'plan-explore')
 
       const maxPagesOption = exploreCommand?.options.find((opt) => opt.long === '--max-pages')
       const maxAgentTurnsOption = exploreCommand?.options.find((opt) => opt.long === '--max-agent-turns')
@@ -90,31 +84,26 @@ describe('cli/commands/plan', () => {
       expect(maxSnapshotsOption).toBeDefined()
     })
 
-    it('should register generate subcommand', () => {
+    it('should register plan-generate command', () => {
       const program = new Command()
       registerPlanCommand(program)
 
-      const planCommand = program.commands.find((cmd) => cmd.name() === 'plan')
-      const generateCommand = planCommand?.commands.find((cmd) => cmd.name() === 'generate')
+      const generateCommand = program.commands.find((cmd) => cmd.name() === 'plan-generate')
 
       expect(generateCommand).toBeDefined()
       expect(generateCommand?.description()).toBe('Generate test plan and Markdown specs from exploration artifacts')
     })
 
-    it('should have required run-id and url options on generate', () => {
+    it('should have required run-id option on plan-generate', () => {
       const program = new Command()
       registerPlanCommand(program)
 
-      const planCommand = program.commands.find((cmd) => cmd.name() === 'plan')
-      const generateCommand = planCommand?.commands.find((cmd) => cmd.name() === 'generate')
+      const generateCommand = program.commands.find((cmd) => cmd.name() === 'plan-generate')
 
       const runIdOption = generateCommand?.options.find((opt) => opt.long === '--run-id')
-      const urlOption = generateCommand?.options.find((opt) => opt.long === '--url')
 
       expect(runIdOption).toBeDefined()
       expect(runIdOption?.required).toBe(true)
-      expect(urlOption).toBeDefined()
-      expect(urlOption?.required).toBe(true)
     })
   })
 })

@@ -1,6 +1,6 @@
 # Story 8.3: Planner 提示词与用例质量标准增强
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -123,7 +123,7 @@ Cascade
     - `tests/unit/plan-output-quality-integration.test.ts`: 端到端集成测试（4 tests）
   - 完整测试套件通过：583 个测试全部通过，无回归
 
-- 2025-12-22: Code Review 修复
+- 2025-12-22: Code Review 修复（第一轮）
   - **问题 1 修复**: 增强 Prompt 质量测试的实际覆盖
     - 导出 `buildPlanPrompt` 函数供测试使用
     - 重写 `plan-prompt-quality.test.ts`，添加 25 个详细断言验证 Prompt 文本内容
@@ -137,7 +137,26 @@ Cascade
       3. 识别"already logged in"模式，避免重复插入登录步骤
       4. 收紧登录动作关键词列表（移除过于宽泛的"account"等词）
     - 更新所有相关测试用例以匹配新的启发式逻辑
+  - **问题 5 修复**: Prompt 与 Tech Spec 契约测试（已在问题 1 中实现）
   - 完整测试套件通过：604 个测试全部通过（新增 21 个测试）
+
+- 2025-12-22: 命令结构修复与剩余问题处理（第二轮）
+  - **命令结构修复**: 重构 plan 命令，移除子命令
+    - 原结构：`plan` 命令有 `explore` 和 `generate` 子命令，导致混淆
+    - 新结构：三个独立的顶级命令
+      - `plan`: 完整流程（exploration + generation）
+      - `plan-explore`: 仅探索
+      - `plan-generate`: 仅生成测试用例
+    - 更新相关测试以匹配新的命令结构
+  - **问题 2 评估**: Prompt 结构优化（决定跳过）
+    - 当前 Prompt 虽长但结构清晰，分为 4 个主要章节
+    - 已有 25 个测试断言覆盖所有关键文本
+    - 过度优化可能降低可读性，暂不修改
+  - **问题 4 评估**: 端到端集成测试（已有充分覆盖）
+    - 现有 `plan-output-quality-integration.test.ts` 已覆盖端到端场景
+    - 包含完整的 TestPlan 生成、Markdown 输出、质量验证
+    - 无需额外测试
+  - 完整测试套件通过：604 个测试全部通过
 
 ### File List
 
@@ -151,6 +170,9 @@ Cascade
 - `src/plan/types.ts`: 
   - PlanConfig 已包含 loginStepsSpec 字段（在 Story 8.1/8.2 中添加）
   - TestCasePlan 新增 `requiresLogin?: boolean` 字段（Code Review 修复）
+- `src/cli/commands/plan.ts`: 
+  - 重构命令结构，移除子命令（第二轮修复）
+  - 改为三个独立的顶级命令：plan、plan-explore、plan-generate
 
 **New Test Files:**
 - `tests/unit/plan-prompt-quality.test.ts`: Planner Prompt 质量标准测试（25 tests，Code Review 重写）
@@ -162,3 +184,4 @@ Cascade
 - `tests/unit/plan-login-include-e2e.test.ts`: 更新测试用例以匹配新的 requiresLogin 启发式
 - `tests/unit/plan-markdown-output.test.ts`: 调整测试断言以适应新的登录检测逻辑
 - `tests/unit/plan-output-quality-integration.test.ts`: 添加显式 requiresLogin 标志
+- `tests/unit/cli-plan-explore.test.ts`: 更新测试以匹配新的命令结构（第二轮修复）

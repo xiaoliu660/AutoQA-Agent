@@ -124,45 +124,10 @@ async function closeBrowserSafely(browserResult: any): Promise<void> {
 }
 
 export function registerPlanCommand(program: Command): void {
-  // Register the main "plan" command with subcommands
-  const planCommand = program
+  // Register "plan" command (full exploration + generation)
+  program
     .command('plan')
-    .description('Plan and explore test scenarios (default: run full exploration + generation)')
-
-  // Register "explore" subcommand
-  planCommand
-    .command('explore')
-    .description('Explore a web application and generate page structure')
-    .option('--config <path>', 'Path to autoqa.config.json (default: ./autoqa.config.json)')
-    .requiredOption('-u, --url <url>', 'Target application URL', validateUrl)
-    .option('-d, --depth <number>', 'Maximum exploration depth (0-10)', validateDepth)
-    .option('--max-pages <number>', 'Maximum pages to visit', validatePositiveInt)
-    .option('--max-agent-turns <number>', 'Maximum agent tool calls (guardrail)', validatePositiveInt)
-    .option('--max-snapshots <number>', 'Maximum snapshots to capture (guardrail)', validatePositiveInt)
-    .option('--explore-scope <mode>', 'Exploration scope mode: site, focused, or single_page', validateExploreScope)
-    .option('--login-url <url>', 'Login page URL (optional)', validateUrl)
-    .option('--username <username>', 'Login username (optional)')
-    .option('--password <password>', 'Login password (optional)')
-    .option('--headless', 'Run browser in headless mode', false)
-    .action(async (options) => {
-      await runExploreCommand(options)
-    })
-
-  // Register "generate" subcommand
-  planCommand
-    .command('generate')
-    .description('Generate test plan and Markdown specs from exploration artifacts')
-    .option('--config <path>', 'Path to autoqa.config.json (default: ./autoqa.config.json)')
-    .requiredOption('--run-id <runId>', 'Exploration run ID to generate tests from')
-    .requiredOption('-u, --url <url>', 'Target application URL', validateUrl)
-    .option('--test-types <types>', 'Comma-separated list of test types (functional,form,navigation,responsive,boundary,security)')
-    .option('--max-agent-turns <number>', 'Maximum agent turns for planning', validatePositiveInt)
-    .action(async (options) => {
-      await runGenerateCommand(options)
-    })
-
-  // Set default action for plan command (when no subcommand is provided)
-  planCommand
+    .description('Run full test planning: exploration + test case generation')
     .option('--config <path>', 'Path to autoqa.config.json (default: ./autoqa.config.json)')
     .option('-u, --url <url>', 'Target application URL (optional, can be loaded from config)', validateUrl)
     .option('-d, --depth <number>', 'Maximum exploration depth (0-10)', validateDepth)
@@ -179,10 +144,10 @@ export function registerPlanCommand(program: Command): void {
       await runFullPlanCommand(options)
     })
 
-  // Register legacy commands for backward compatibility
+  // Register "plan-explore" command (exploration only)
   program
     .command('plan-explore')
-    .description('Explore a web application and generate page structure (exploration only) - alias for "plan explore"')
+    .description('Explore a web application and generate page structure (exploration only)')
     .option('--config <path>', 'Path to autoqa.config.json (default: ./autoqa.config.json)')
     .requiredOption('-u, --url <url>', 'Target application URL', validateUrl)
     .option('-d, --depth <number>', 'Maximum exploration depth (0-10)', validateDepth)
@@ -198,9 +163,10 @@ export function registerPlanCommand(program: Command): void {
       await runExploreCommand(options)
     })
 
+  // Register "plan-generate" command (generation only)
   program
     .command('plan-generate')
-    .description('Generate test plan and Markdown specs from exploration artifacts - alias for "plan generate"')
+    .description('Generate test plan and Markdown specs from exploration artifacts')
     .option('--config <path>', 'Path to autoqa.config.json (default: ./autoqa.config.json)')
     .requiredOption('--run-id <runId>', 'Exploration run ID to generate tests from')
     .option('-u, --url <url>', 'Target application URL (optional, used for config context)', validateUrl)
