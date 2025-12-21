@@ -1,6 +1,6 @@
 # Story 8.2: 探索与测试计划围绕指定 URL Scope 聚焦
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 

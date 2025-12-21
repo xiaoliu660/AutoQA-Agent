@@ -14,6 +14,8 @@ export function extractRelativeUrl(url: string): string {
     const parsed = new URL(url)
     return parsed.pathname + parsed.hash
   } catch {
+    // Return the original URL if it's already relative or malformed
+    // This allows relative URLs like "/path" to pass through
     return url
   }
 }
