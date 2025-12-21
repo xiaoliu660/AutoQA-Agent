@@ -1,8 +1,26 @@
 {
   "name": "autoqa-agent",
   "version": "0.0.1",
+  "description": "Automated QA testing agent powered by Claude and Playwright",
   "license": "MIT",
   "type": "module",
+  "keywords": [
+    "testing",
+    "automation",
+    "qa",
+    "e2e",
+    "playwright",
+    "claude",
+    "ai"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nickcmay/autoqa-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nickcmay/autoqa-agent/issues"
+  },
+  "homepage": "https://github.com/nickcmay/autoqa-agent#readme",
   "bin": {
     "autoqa": "dist/cli.js"
   },
@@ -12,7 +30,18 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
-    "autoqa:run": "AUTOQA_CHROMIUM_USER_DATA_DIR=.autoqa/chromium-profile node dist/cli.js run"
+    "test:ci": "vitest run",
+    "autoqa:run": "AUTOQA_CHROMIUM_USER_DATA_DIR=.autoqa/chromium-profile node dist/cli.js run",
+    "prepublishOnly": "npm run build && npm test",
+    "prepack": "npm run build",
+    "version": "npm run build && git add package.json",
+    "postversion": "git push --follow-tags",
+    "release": "npm publish",
+    "release:beta": "npm publish --tag beta",
+    "release:patch": "npm version patch && npm run release",
+    "release:minor": "npm version minor && npm run release",
+    "release:major": "npm version major && npm run release",
+    "pre-release": "npm version prerelease && npm run release:beta"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.1.69",
