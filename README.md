@@ -1,11 +1,10 @@
 # AutoQA-Agent
 
-[![GitHub Repo stars](https://img.shields.io/github/stars/terryso/AutoQA-Agent?style=flat-square)](https://github.com/terryso/AutoQA-Agent/stargazers)
-[![GitHub issues](https://img.shields.io/github/issues/terryso/AutoQA-Agent?style=flat-square)](https://github.com/terryso/AutoQA-Agent/issues)
-[![GitHub pull requests](https://img.shields.io/github/issues-pr/terryso/AutoQA-Agent?style=flat-square)](https://github.com/terryso/AutoQA-Agent/pulls)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/terryso/AutoQA-Agent/pulls)
-[![GitHub last commit](https://img.shields.io/github/last-commit/terryso/AutoQA-Agent?style=flat-square)](https://github.com/terryso/AutoQA-Agent/commits)
-[![License](https://img.shields.io/github/license/terryso/AutoQA-Agent?style=flat-square)](https://github.com/terryso/AutoQA-Agent)
+[![NPM Version](https://img.shields.io/npm/v/autoqa-agent?style=flat-square)](https://www.npmjs.com/package/autoqa-agent)
+[![NPM Downloads](https://img.shields.io/npm/dm/autoqa-agent?style=flat-square)](https://www.npmjs.com/package/autoqa-agent)
+[![GitHub Repo stars](https://img.shields.io/github/stars/nickcmay/autoqa-agent?style=flat-square)](https://github.com/nickcmay/autoqa-agent/stargazers)
+[![GitHub last commit](https://img.shields.io/github/last-commit/nickcmay/autoqa-agent?style=flat-square)](https://github.com/nickcmay/autoqa-agent/commits)
+[![License](https://img.shields.io/github/license/nickcmay/autoqa-agent?style=flat-square)](https://github.com/nickcmay/autoqa-agent)
 [![Node >= 20](https://img.shields.io/badge/node-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![DeepWiki](https://img.shields.io/badge/DeepWiki-AutoQA--Agent-blue?style=flat-square)](https://deepwiki.com/terryso/AutoQA-Agent)
 
@@ -60,9 +59,12 @@ For more detailed architecture boundaries and constraints, please refer to [`doc
 ### Installation
 
 ```bash
-# Clone repository
-git clone https://github.com/terryso/AutoQA-Agent.git
-cd AutoQA-Agent
+# Option 1: Install from NPM (Recommended)
+npm install -g autoqa-agent
+
+# Option 2: Install from Source
+git clone https://github.com/nickcmay/autoqa-agent.git
+cd autoqa-agent
 
 # Install dependencies
 npm install

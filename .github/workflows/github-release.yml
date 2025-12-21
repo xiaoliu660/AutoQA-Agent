@@ -69,7 +69,7 @@ jobs:
 
             ## 使用
             \`\`\`bash
-            npx autoqa run <test-file>
+            npx autoqa run specs/saucedemo-01-login.md --url https://www.saucedemo.com/
             \`\`\`
           draft: false
           prerelease: false
