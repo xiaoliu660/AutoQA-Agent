@@ -95,7 +95,7 @@ development_status:
   epic-7-retrospective: optional
 
   epic-8: in-progress
-  8-1-planner-generated-specs-executable: ready-for-dev
+  8-1-planner-generated-specs-executable: done
   8-2-exploration-test-plan-url-scope: backlog
   8-3-planner-prompt-quality-standards: backlog
   epic-8-retrospective: optional

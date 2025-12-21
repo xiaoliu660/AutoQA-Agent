@@ -31,6 +31,70 @@ function getAssistantContent(message: any): unknown {
   return undefined
 }
 
+function generateUrlMappingExamples(baseUrl: string, graph: ExplorationGraph, loginUrl?: string): string {
+  const url = new URL(baseUrl)
+  const origin = url.origin
+
+  let loginOrigin: string | undefined
+  let loginPathPrefix: string | undefined
+  
+  if (loginUrl) {
+    try {
+      const loginUrlObj = new URL(loginUrl)
+      loginOrigin = loginUrlObj.origin
+      loginPathPrefix = loginUrlObj.pathname
+    } catch {
+      // Invalid loginUrl, ignore
+    }
+  }
+
+  const exampleUrls: string[] = []
+
+  for (const page of graph.pages.slice(0, 5)) {
+    try {
+      const pageUrl = new URL(page.url)
+      if (pageUrl.origin === origin) {
+        const relativePath = pageUrl.pathname + pageUrl.hash + pageUrl.search
+
+        // Check if this page matches the configured login URL
+        const isLoginPage = loginOrigin && loginPathPrefix &&
+          pageUrl.origin === loginOrigin &&
+          pageUrl.pathname.startsWith(loginPathPrefix)
+        
+        const templateVar = isLoginPage ? '{{LOGIN_BASE_URL}}' : '{{BASE_URL}}'
+
+        exampleUrls.push(`  - Actual URL: ${page.url}`)
+        exampleUrls.push(`    In test case: ${templateVar}${relativePath}`)
+      }
+    } catch {
+      // Skip invalid URLs
+    }
+  }
+
+  if (exampleUrls.length === 0) {
+    return `URL Mapping and Template Variables:
+- For all URLs within the baseUrl domain (${origin}), use {{BASE_URL}} + relative path
+- For login pages, use {{LOGIN_BASE_URL}} if different from baseUrl
+- For credentials, use {{USERNAME}} and {{PASSWORD}}
+
+Examples:
+  - Actual URL: ${baseUrl}
+    In test case: {{BASE_URL}}/
+  - Actual URL: ${origin}/login
+    In test case: {{LOGIN_BASE_URL}}/login`
+  }
+
+  return `URL Mapping and Template Variables:
+- For all URLs within the baseUrl domain (${origin}), use {{BASE_URL}} + relative path
+- For login pages, use {{LOGIN_BASE_URL}} if different from baseUrl
+- For credentials, use {{USERNAME}} and {{PASSWORD}}
+
+Examples from explored pages:
+${exampleUrls.join('\n')}
+
+Note: If LOGIN_BASE_URL is not provided, it defaults to BASE_URL for all URLs.`
+}
+
 function buildPlanPrompt(options: PlanAgentOptions): string {
   const { config, graph } = options
   const pagesSummaryLines: string[] = []
@@ -55,6 +119,9 @@ function buildPlanPrompt(options: PlanAgentOptions): string {
     ? `Guardrails:\n${guardrailLines.join('\n')}`
     : ''
 
+  // Generate URL mapping examples for template variable usage
+  const urlMappingExamples = generateUrlMappingExamples(config.baseUrl, graph, config.auth?.loginUrl)
+
   return `You are an AutoQA Test Planner Agent.
 
 Your task is to design a structured test plan (TestPlan) based on the exploration results of a web application.
@@ -67,11 +134,45 @@ ${guardrailSection}
 ExplorationGraph summary (pages):
 ${pagesSummary}
 
+${urlMappingExamples}
+
 You must:
 - Decide which pages should receive which types of tests (functional/form/navigation/responsive/boundary/security).
 - Group related cases into flows when appropriate.
-- Use placeholders like {{USERNAME}} and {{PASSWORD}} instead of real credentials.
-- Produce clear natural language descriptions and expected results.
+- Use template variables for all URLs and credentials (see URL Mapping and Template Variables section above).
+- Produce clear, executable natural language descriptions and expected results.
+
+CRITICAL Markdown Structure Requirements:
+The generated test cases MUST be executable by the AutoQA runner. Follow these rules strictly:
+
+1. Preconditions:
+   - MUST include key URLs using template variables ({{BASE_URL}}, {{LOGIN_BASE_URL}})
+   - Example: "Base URL accessible: {{BASE_URL}}"
+   - Example: "Login page accessible: {{LOGIN_BASE_URL}}/login"
+   - If authentication required: "Valid test account available (via AUTOQA_USERNAME / AUTOQA_PASSWORD environment variables)"
+   - Describe initial state clearly (e.g., "Shopping cart is empty", "User is logged out")
+
+2. Steps:
+   - Use executable action verbs: Navigate, Click, Fill, Select, Verify, Expect
+   - Navigation steps MUST include specific URLs with template variables
+     - CORRECT: "Navigate to {{BASE_URL}}/products"
+     - WRONG: "Navigate to products page" (too vague)
+   - For pages within the baseUrl domain, always use {{BASE_URL}} + relative path
+   - For login pages, use {{LOGIN_BASE_URL}} if different from baseUrl
+   - Verification steps should be specific and testable
+     - CORRECT: "Verify the page title is 'Products'"
+     - WRONG: "Verify the page loads correctly" (too vague)
+
+3. Expected Results:
+   - Each step's expectedResult MUST be non-empty and specific
+   - Describe observable, verifiable outcomes
+   - CORRECT: "The cart badge shows count of 1"
+   - WRONG: "The page works as expected" (too vague)
+
+4. Credentials and Sensitive Data:
+   - Use {{USERNAME}} and {{PASSWORD}} placeholders
+   - Never include actual credentials in test cases
+   - Reference environment variables in preconditions
 
 Output requirements (CRITICAL):
 - Respond with JSON in the following shape, and nothing else:
@@ -87,9 +188,19 @@ Output requirements (CRITICAL):
       "priority": "p0" | "p1" | "p2",
       "relatedPageIds": ["page-id-1", "page-id-2"],
       "markdownPath": "relative/path/to/spec.md",
-      "preconditions": ["..."],
+      "preconditions": [
+        "Base URL accessible: {{BASE_URL}}",
+        "Other specific preconditions with URLs using template variables..."
+      ],
       "steps": [
-        {"description": "step description", "expectedResult": "expected outcome"}
+        {
+          "description": "Navigate to {{BASE_URL}}/specific/path",
+          "expectedResult": "Specific, verifiable outcome"
+        },
+        {
+          "description": "Click the 'Submit' button",
+          "expectedResult": "Form is submitted and success message appears"
+        }
       ]
     }
   ]

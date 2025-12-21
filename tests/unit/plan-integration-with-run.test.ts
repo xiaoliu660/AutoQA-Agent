@@ -113,11 +113,11 @@ describe('Plan Integration with Run and Export', () => {
 
       // Should have default precondition
       expect(parseResult.value.preconditions).toHaveLength(1)
-      expect(parseResult.value.preconditions[0]).toContain('Environment is prepared')
+      expect(parseResult.value.preconditions[0]).toContain('Base URL accessible: {{BASE_URL}}')
 
       // Should have default step
       expect(parseResult.value.steps).toHaveLength(1)
-      expect(parseResult.value.steps[0].text).toContain('Execute the main user journey')
+      expect(parseResult.value.steps[0].text).toContain('Navigate to {{BASE_URL}}/')
     })
 
     it('should classify steps correctly as actions or assertions', () => {
@@ -351,7 +351,7 @@ describe('Plan Integration with Run and Export', () => {
       if (!parseResult.ok) return
 
       expect(parseResult.value.steps).toHaveLength(1)
-      expect(parseResult.value.steps[0].text).toContain('Execute the main user journey')
+      expect(parseResult.value.steps[0].text).toContain('Navigate to {{BASE_URL}}/')
     })
 
     it('should handle steps with special characters', () => {

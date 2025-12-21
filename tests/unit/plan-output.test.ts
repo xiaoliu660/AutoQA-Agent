@@ -249,10 +249,10 @@ describe('plan/output', () => {
       const markdown = buildMarkdownForTestCase(testCase)
 
       expect(markdown).toContain('## Preconditions')
-      expect(markdown).toContain('Environment is prepared and application is reachable.')
+      expect(markdown).toContain('Base URL accessible: {{BASE_URL}}')
       expect(markdown).toContain('## Steps')
-      expect(markdown).toContain('1. Execute the main user journey for this test case.')
-      expect(markdown).toContain('Expected: The application behaves as described in the test case name and type.')
+      expect(markdown).toContain('1. Navigate to {{BASE_URL}}/')
+      expect(markdown).toContain('Expected: The application home page loads successfully.')
     })
   })
 

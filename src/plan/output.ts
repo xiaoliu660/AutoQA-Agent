@@ -211,7 +211,7 @@ export type WriteTestPlanOutput = {
 export function buildMarkdownForTestCase(testCase: TestCasePlan): string {
   const lines: string[] = []
 
-  lines.push(`# ${testCase.name}`)
+  lines.push(`# ${testCase.name} (Auto-generated)`)
   lines.push('')
   lines.push(`Type: ${testCase.type} | Priority: ${testCase.priority.toUpperCase()}`)
   lines.push('')
@@ -219,7 +219,7 @@ export function buildMarkdownForTestCase(testCase: TestCasePlan): string {
   lines.push('## Preconditions')
   const preconditions = testCase.preconditions && testCase.preconditions.length > 0
     ? testCase.preconditions
-    : ['Environment is prepared and application is reachable.']
+    : ['Base URL accessible: {{BASE_URL}}']
   for (const p of preconditions) {
     lines.push(`- ${p}`)
   }
@@ -231,8 +231,8 @@ export function buildMarkdownForTestCase(testCase: TestCasePlan): string {
     : []
 
   if (steps.length === 0) {
-    lines.push('1. Execute the main user journey for this test case.')
-    lines.push('   - Expected: The application behaves as described in the test case name and type.')
+    lines.push('1. Navigate to {{BASE_URL}}/')
+    lines.push('   - Expected: The application home page loads successfully.')
   } else {
     steps.forEach((step, index) => {
       const n = index + 1
