@@ -176,14 +176,6 @@ Each test case MUST include:
   - CORRECT: "Fill the 'Search' input field with 'laptop'"
   - WRONG: "Enter search term" (missing specifics)
 
-**Verifiable Success Criteria (Expected Results):**
-- Each step MUST have a non-empty, specific expectedResult
-- Describe observable outcomes that can be automatically verified
-- CORRECT: "The search results show at least 1 product matching 'laptop'"
-- CORRECT: "Error message 'Username is required' appears below the username field"
-- WRONG: "The page works correctly" (too vague)
-- WRONG: "User sees results" (not specific enough)
-
 **Test Independence:**
 - Each test case should be executable independently
 - Avoid dependencies on side effects from other test cases
@@ -210,12 +202,6 @@ The generated test cases MUST be executable by the AutoQA runner. Follow these r
 - Verification steps should be specific and testable
   - CORRECT: "Verify the page title is 'Products'"
   - WRONG: "Verify the page loads correctly" (too vague)
-
-**Expected Results:**
-- Each step's expectedResult MUST be non-empty and specific
-- Describe observable, verifiable outcomes
-- CORRECT: "The cart badge shows count of 1"
-- WRONG: "The page works as expected" (too vague)
 
 **Credentials and Sensitive Data:**
 - Use {{USERNAME}} and {{PASSWORD}} placeholders
@@ -251,12 +237,13 @@ Respond with JSON in the following shape, and nothing else:
       ],
       "steps": [
         {
-          "description": "Navigate to {{BASE_URL}}/specific/path",
-          "expectedResult": "Specific, verifiable outcome"
+          "description": "Navigate to {{BASE_URL}}/specific/path"
         },
         {
-          "description": "Click the 'Submit' button",
-          "expectedResult": "Form is submitted and success message appears"
+          "description": "Click the 'Submit' button"
+        },
+        {
+          "description": "Verify success message appears"
         }
       ]
     }
@@ -318,11 +305,10 @@ function normalizeCase(testCase: any, index: number): TestCasePlan {
     ? (testCase.steps as unknown[])
       .map((s) => {
         const description = typeof (s as any)?.description === 'string' ? (s as any).description : ''
-        const expectedResult = typeof (s as any)?.expectedResult === 'string' ? (s as any).expectedResult : ''
-        if (!description && !expectedResult) return null
-        return { description, expectedResult }
+        if (!description) return null
+        return { description }
       })
-      .filter((v): v is { description: string; expectedResult: string } => v !== null)
+      .filter((v): v is { description: string } => v !== null)
     : undefined
 
   const requiresLogin = typeof testCase?.requiresLogin === 'boolean'

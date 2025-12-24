@@ -4,10 +4,10 @@ import type { TestCasePlan } from '../../src/plan/types.js'
 
 /**
  * Unit tests for boundary and negative case generation (Story 8.3)
- * 
+ *
  * Verifies that:
  * - Boundary test cases are properly structured
- * - Negative cases include appropriate error expectations
+ * - Negative cases include explicit verification steps
  * - Markdown output preserves quality constraints
  */
 
@@ -28,11 +28,12 @@ describe('Boundary and Negative Case Generation', () => {
         steps: [
           {
             description: 'Navigate to {{BASE_URL}}/search',
-            expectedResult: 'Search page loads successfully',
           },
           {
             description: 'Click the "Search" button without entering any text',
-            expectedResult: 'Error message "Search term is required" appears',
+          },
+          {
+            description: 'Verify error message "Search term is required" appears',
           },
         ],
       }
@@ -45,8 +46,9 @@ describe('Boundary and Negative Case Generation', () => {
       expect(markdown).toContain('Base URL accessible: {{BASE_URL}}')
       expect(markdown).toContain('## Steps')
       expect(markdown).toContain('Navigate to {{BASE_URL}}/search')
-      expect(markdown).toContain('Expected: Search page loads successfully')
-      expect(markdown).toContain('Error message "Search term is required" appears')
+      expect(markdown).toContain('Verify error message "Search term is required" appears')
+      // Should NOT contain Expected clauses
+      expect(markdown).not.toContain('- Expected:')
     })
 
     it('should generate markdown for negative case with invalid credentials', () => {
@@ -64,19 +66,18 @@ describe('Boundary and Negative Case Generation', () => {
         steps: [
           {
             description: 'Navigate to {{LOGIN_BASE_URL}}/login',
-            expectedResult: 'Login page displays with username and password fields',
           },
           {
             description: 'Fill the "Username" field with "invalid_user"',
-            expectedResult: 'Username field contains "invalid_user"',
           },
           {
             description: 'Fill the "Password" field with "wrong_password"',
-            expectedResult: 'Password field is filled (masked)',
           },
           {
             description: 'Click the "Login" button',
-            expectedResult: 'Error message "Invalid username or password" appears and user remains on login page',
+          },
+          {
+            description: 'Verify error message "Invalid username or password" appears and user remains on login page',
           },
         ],
       }
@@ -105,15 +106,15 @@ describe('Boundary and Negative Case Generation', () => {
         steps: [
           {
             description: 'Navigate to {{BASE_URL}}/contact',
-            expectedResult: 'Contact form page loads',
           },
           {
             description: 'Fill the "Message" field with 1000 characters',
-            expectedResult: 'Message field accepts input up to maximum length',
           },
           {
             description: 'Attempt to enter additional characters beyond 1000',
-            expectedResult: 'Input is truncated or prevented, character counter shows 1000/1000',
+          },
+          {
+            description: 'Verify input is truncated or prevented, and character counter shows 1000/1000',
           },
         ],
       }
@@ -127,7 +128,7 @@ describe('Boundary and Negative Case Generation', () => {
   })
 
   describe('Quality constraints for boundary cases', () => {
-    it('should preserve specific expected results in boundary cases', () => {
+    it('should preserve verification steps in boundary cases', () => {
       const testCase: TestCasePlan = {
         id: 'search-no-results',
         name: 'Search with No Results',
@@ -139,25 +140,27 @@ describe('Boundary and Negative Case Generation', () => {
         steps: [
           {
             description: 'Navigate to {{BASE_URL}}/search',
-            expectedResult: 'Search page loads',
           },
           {
             description: 'Fill the search field with "xyznonexistentquery123"',
-            expectedResult: 'Search field contains the query',
           },
           {
             description: 'Click the "Search" button',
-            expectedResult: 'Message "No results found for \'xyznonexistentquery123\'" is displayed',
+          },
+          {
+            description: 'Verify message "No results found for \'xyznonexistentquery123\'" is displayed',
           },
         ],
       }
 
       const markdown = buildMarkdownForTestCase(testCase)
 
-      // Verify all expected results are preserved
-      expect(markdown).toContain('Expected: Search page loads')
-      expect(markdown).toContain('Expected: Search field contains the query')
-      expect(markdown).toContain('Expected: Message "No results found')
+      // Verify verification steps are present
+      expect(markdown).toContain('Navigate to {{BASE_URL}}/search')
+      expect(markdown).toContain('Fill the search field with "xyznonexistentquery123"')
+      expect(markdown).toContain('Verify message "No results found')
+      // Should NOT contain Expected clauses
+      expect(markdown).not.toContain('- Expected:')
     })
 
     it('should maintain clear preconditions for negative test cases', () => {
@@ -176,7 +179,9 @@ describe('Boundary and Negative Case Generation', () => {
         steps: [
           {
             description: 'Navigate to {{BASE_URL}}/admin',
-            expectedResult: 'User is redirected to login page or sees "Access Denied" message',
+          },
+          {
+            description: 'Verify user is redirected to login page or sees "Access Denied" message',
           },
         ],
       }

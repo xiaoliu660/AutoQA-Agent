@@ -7,7 +7,7 @@ import { join } from 'node:path'
 
 /**
  * Integration tests for Planner output quality (Story 8.3)
- * 
+ *
  * Verifies end-to-end behavior:
  * - Complete test plan generation with quality constraints
  * - Markdown specs are executable by autoqa run
@@ -44,15 +44,15 @@ describe('Planner Output Quality Integration', () => {
             steps: [
               {
                 description: 'Navigate to {{BASE_URL}}/search',
-                expectedResult: 'Search page loads with search input field',
               },
               {
                 description: 'Fill the search field with "laptop"',
-                expectedResult: 'Search field contains "laptop"',
               },
               {
                 description: 'Click the "Search" button',
-                expectedResult: 'Search results page displays at least 1 product matching "laptop"',
+              },
+              {
+                description: 'Verify search results page displays at least 1 product matching "laptop"',
               },
             ],
           },
@@ -70,11 +70,12 @@ describe('Planner Output Quality Integration', () => {
             steps: [
               {
                 description: 'Navigate to {{BASE_URL}}/search',
-                expectedResult: 'Search page loads',
               },
               {
                 description: 'Click the "Search" button without entering text',
-                expectedResult: 'Error message "Search term is required" appears',
+              },
+              {
+                description: 'Verify error message "Search term is required" appears',
               },
             ],
           },
@@ -82,7 +83,7 @@ describe('Planner Output Quality Integration', () => {
       }
 
       const tmpDir = await mkdtemp(join(tmpdir(), 'autoqa-test-'))
-      
+
       try {
         const output = await writeTestPlan(testPlan, {
           cwd: tmpDir,
@@ -96,7 +97,7 @@ describe('Planner Output Quality Integration', () => {
         // Verify happy path spec
         const happyPath = join(tmpDir, '.autoqa/runs/test-run-123/plan/specs/search-happy.md')
         const happyContent = await readFile(happyPath, 'utf-8')
-        
+
         expect(happyContent).toContain('# Search with Valid Query (Auto-generated)')
         expect(happyContent).toContain('Type: functional')
         expect(happyContent).toContain('Priority: P0')
@@ -104,16 +105,18 @@ describe('Planner Output Quality Integration', () => {
         expect(happyContent).toContain('Base URL accessible: {{BASE_URL}}')
         expect(happyContent).toContain('## Steps')
         expect(happyContent).toContain('Navigate to {{BASE_URL}}/search')
-        expect(happyContent).toContain('Expected: Search page loads with search input field')
-        expect(happyContent).toContain('Expected: Search results page displays at least 1 product matching "laptop"')
+        // Should NOT contain Expected clauses
+        expect(happyContent).not.toContain('Expected:')
 
         // Verify boundary case spec
         const boundaryPath = join(tmpDir, '.autoqa/runs/test-run-123/plan/specs/search-empty.md')
         const boundaryContent = await readFile(boundaryPath, 'utf-8')
-        
+
         expect(boundaryContent).toContain('# Search with Empty Input (Auto-generated)')
         expect(boundaryContent).toContain('Type: boundary')
-        expect(boundaryContent).toContain('Expected: Error message "Search term is required" appears')
+        // Should have explicit Verify step instead of Expected clause
+        expect(boundaryContent).toContain('Verify error message')
+        expect(boundaryContent).not.toContain('Expected:')
       } finally {
         await rm(tmpDir, { recursive: true, force: true })
       }
@@ -147,7 +150,6 @@ describe('Planner Output Quality Integration', () => {
             steps: [
               {
                 description: 'Navigate to {{BASE_URL}}/profile',
-                expectedResult: 'Profile page displays user information',
               },
             ],
           },
@@ -155,7 +157,7 @@ describe('Planner Output Quality Integration', () => {
       }
 
       const tmpDir = await mkdtemp(join(tmpdir(), 'autoqa-test-'))
-      
+
       try {
         const output = await writeTestPlan(testPlan, {
           cwd: tmpDir,
@@ -167,7 +169,7 @@ describe('Planner Output Quality Integration', () => {
 
         const specPath = join(tmpDir, '.autoqa/runs/test-run-456/plan/specs/profile-view.md')
         const content = await readFile(specPath, 'utf-8')
-        
+
         expect(content).toContain('1. include: custom/login')
         expect(content).toContain('2. Navigate to {{BASE_URL}}/profile')
       } finally {
@@ -191,7 +193,9 @@ describe('Planner Output Quality Integration', () => {
         steps: [
           {
             description: 'Navigate to {{BASE_URL}}/',
-            expectedResult: 'Home page loads',
+          },
+          {
+            description: 'Verify home page loads successfully',
           },
         ],
       }
@@ -201,12 +205,12 @@ describe('Planner Output Quality Integration', () => {
       // Verify required sections exist
       expect(markdown).toContain('## Preconditions')
       expect(markdown).toContain('## Steps')
-      
+
       // Verify steps are numbered
       expect(markdown).toMatch(/1\.\s+Navigate/)
-      
-      // Verify expected results are formatted correctly
-      expect(markdown).toContain('- Expected:')
+
+      // Should NOT contain Expected clauses (verifications are explicit steps)
+      expect(markdown).not.toContain('- Expected:')
     })
 
     it('should handle cases with no explicit steps gracefully', () => {
@@ -226,7 +230,8 @@ describe('Planner Output Quality Integration', () => {
 
       // Should generate a default navigation step
       expect(markdown).toContain('1. Navigate to {{BASE_URL}}/')
-      expect(markdown).toContain('Expected: The application home page loads successfully')
+      // Should NOT contain Expected clause in default step
+      expect(markdown).not.toContain('Expected:')
     })
   })
 })

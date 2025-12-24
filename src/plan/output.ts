@@ -316,14 +316,9 @@ export function buildMarkdownForTestCase(
 
   if (steps.length === 0) {
     lines.push(`${stepNumber}. Navigate to {{BASE_URL}}/`)
-    lines.push('   - Expected: The application home page loads successfully.')
   } else {
     steps.forEach((step) => {
       lines.push(`${stepNumber}. ${step.description}`)
-      const expected = step.expectedResult.trim()
-      if (expected.length > 0) {
-        lines.push(`   - Expected: ${expected}`)
-      }
       stepNumber++
     })
   }

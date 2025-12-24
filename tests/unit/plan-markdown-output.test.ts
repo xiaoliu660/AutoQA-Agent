@@ -20,23 +20,18 @@ describe('Planner Markdown Output', () => {
         steps: [
           {
             description: 'Navigate to {{BASE_URL}}/login',
-            expectedResult: 'Login page loads with username and password fields',
           },
           {
             description: 'Fill the "Username" field with {{USERNAME}}',
-            expectedResult: 'Username field contains the test username',
           },
           {
             description: 'Fill the "Password" field with {{PASSWORD}}',
-            expectedResult: 'Password field is filled (masked)',
           },
           {
             description: 'Click the "Login" button',
-            expectedResult: 'User is redirected to dashboard page',
           },
           {
             description: 'Verify the page title is "Dashboard"',
-            expectedResult: 'Page title matches expected value',
           },
         ],
       }
@@ -50,17 +45,18 @@ describe('Planner Markdown Output', () => {
         expect(result.value.preconditions[0]).toContain('{{BASE_URL}}')
         // Now includes login include step + 5 original steps = 6 total
         expect(result.value.steps).toHaveLength(6)
-        
+
         // First step should be the auto-inserted login include
         const firstStepText = result.value.steps[0].text
         expect(firstStepText).toContain('include: login')
-        
+
         // Second step should be the first original step
         const secondStepText = result.value.steps[1].text
         expect(secondStepText).toContain('Navigate to {{BASE_URL}}/login')
-        
-        expect(markdown).toContain('Expected: Login page loads')
       }
+      // Should NOT contain Expected clauses (removed from generated specs)
+      expect(markdown).not.toContain('- Expected:')
+      expect(markdown).not.toContain('Expected:')
     })
 
     it('should use template variables for URLs in generated specs', () => {
@@ -78,19 +74,15 @@ describe('Planner Markdown Output', () => {
         steps: [
           {
             description: 'Navigate to {{BASE_URL}}/products',
-            expectedResult: 'Product catalog page loads',
           },
           {
             description: 'Fill the search field with "laptop"',
-            expectedResult: 'Search field contains "laptop"',
           },
           {
             description: 'Click the "Search" button',
-            expectedResult: 'Search results page displays matching products',
           },
           {
             description: 'Verify at least one product card is visible',
-            expectedResult: 'Product cards are displayed in the results',
           },
         ],
       }
@@ -138,23 +130,18 @@ describe('Planner Markdown Output', () => {
         steps: [
           {
             description: 'Navigate to {{BASE_URL}}/contact',
-            expectedResult: 'Contact form page loads',
           },
           {
             description: 'Fill the "Name" field with "Test User"',
-            expectedResult: 'Name field contains "Test User"',
           },
           {
             description: 'Fill the "Email" field with "test@example.com"',
-            expectedResult: 'Email field contains valid email',
           },
           {
             description: 'Click the "Submit" button',
-            expectedResult: 'Form is submitted successfully',
           },
           {
             description: 'Verify success message "Thank you" is displayed',
-            expectedResult: 'Success message appears on the page',
           },
         ],
       }
@@ -167,7 +154,7 @@ describe('Planner Markdown Output', () => {
       }
     })
 
-    it('should include non-empty expectedResult for all steps', () => {
+    it('should not include Expected clauses (using explicit Verify steps instead)', () => {
       const testCase: TestCasePlan = {
         id: 'test-5',
         name: 'Cart Operations',
@@ -182,15 +169,12 @@ describe('Planner Markdown Output', () => {
         steps: [
           {
             description: 'Navigate to {{BASE_URL}}/products',
-            expectedResult: 'Products page displays available items',
           },
           {
             description: 'Click "Add to cart" for the first product',
-            expectedResult: 'Cart badge count increases to 1',
           },
           {
             description: 'Click the cart icon',
-            expectedResult: 'Cart page shows the added product',
           },
         ],
       }
@@ -207,14 +191,13 @@ describe('Planner Markdown Output', () => {
         }
         if (line.trim().startsWith('- Expected:')) {
           expectedCount++
-          expect(line.length).toBeGreaterThan('- Expected: '.length)
         }
       }
 
       // User is already logged in, so NO login include step + 3 original steps = 3 total
       expect(stepCount).toBe(3)
-      // All 3 steps have Expected lines
-      expect(expectedCount).toBe(3)
+      // No Expected lines - verifications should be explicit steps
+      expect(expectedCount).toBe(0)
     })
 
     it('should not include hardcoded credentials', () => {
@@ -232,15 +215,12 @@ describe('Planner Markdown Output', () => {
         steps: [
           {
             description: 'Navigate to {{BASE_URL}}/login',
-            expectedResult: 'Login page loads',
           },
           {
             description: 'Fill the "Username" field with {{USERNAME}}',
-            expectedResult: 'Username is entered',
           },
           {
             description: 'Fill the "Password" field with {{PASSWORD}}',
-            expectedResult: 'Password is entered',
           },
         ],
       }
@@ -280,9 +260,9 @@ describe('Planner Markdown Output', () => {
         relatedPageIds: [],
         markdownPath: 'ordered.md',
         steps: [
-          { description: 'First step', expectedResult: 'Result 1' },
-          { description: 'Second step', expectedResult: 'Result 2' },
-          { description: 'Third step', expectedResult: 'Result 3' },
+          { description: 'First step' },
+          { description: 'Second step' },
+          { description: 'Third step' },
         ],
       }
 
@@ -327,11 +307,9 @@ describe('Planner Markdown Output', () => {
         steps: [
           {
             description: 'Navigate to {{BASE_URL}}/products?category=laptops&sort=price',
-            expectedResult: 'Products page loads with filtered results',
           },
           {
             description: 'Navigate to {{BASE_URL}}/profile#settings',
-            expectedResult: 'Profile settings section is visible',
           },
         ],
       }
@@ -358,11 +336,9 @@ describe('Planner Markdown Output', () => {
         steps: [
           {
             description: 'Navigate to {{LOGIN_BASE_URL}}/auth/login',
-            expectedResult: 'Login page loads with authentication form',
           },
           {
             description: 'After login, redirect to {{BASE_URL}}/dashboard',
-            expectedResult: 'User dashboard is displayed',
           },
         ],
       }

@@ -74,11 +74,9 @@ describe('plan/plan-agent', () => {
           steps: [
             {
               description: 'Open login page',
-              expectedResult: 'Login form is visible',
             },
             {
               description: '',
-              expectedResult: '',
             },
           ],
         },
@@ -161,7 +159,6 @@ describe('plan/plan-agent', () => {
     expect(testCase.steps).toHaveLength(1)
     expect(testCase.steps?.[0]).toEqual({
       description: 'Open login page',
-      expectedResult: 'Login form is visible',
     })
   })
 

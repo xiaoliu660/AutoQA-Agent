@@ -5,12 +5,12 @@ import type { Logger } from '../../src/logging/index.js'
 
 /**
  * Unit tests for Planner Prompt Quality Standards (Story 8.3)
- * 
+ *
  * These tests verify that the planner prompt includes:
  * - Happy path and boundary/negative case requirements
- * - Quality constraints for preconditions and success criteria
+ * - Quality constraints for preconditions
  * - Executable step semantics
- * 
+ *
  * These tests act as a contract between the implementation and Tech Spec.
  * If any of these key phrases are removed from the prompt, tests should fail.
  */
@@ -75,35 +75,35 @@ describe('Planner Prompt Quality Standards', () => {
     it('should include Test Planning Principles section', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('# Test Planning Principles')
     })
 
     it('should include Comprehensive Scenario Coverage section', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('## 1. Comprehensive Scenario Coverage')
     })
 
     it('should include Test Case Quality Standards section', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('## 2. Test Case Quality Standards')
     })
 
     it('should include Markdown Structure Requirements section', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('## 3. Markdown Structure Requirements')
     })
 
     it('should include Output Format section', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('## 4. Output Format')
     })
   })
@@ -112,7 +112,7 @@ describe('Planner Prompt Quality Standards', () => {
     it('should explicitly require Happy Path cases', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('**Happy Path Cases:**')
       expect(prompt).toContain('At least ONE test case covering the normal, successful flow')
     })
@@ -120,7 +120,7 @@ describe('Planner Prompt Quality Standards', () => {
     it('should explicitly require Boundary & Negative cases', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('**Boundary & Negative Cases:**')
       expect(prompt).toContain('At least ONE test case covering edge cases and error conditions')
     })
@@ -128,7 +128,7 @@ describe('Planner Prompt Quality Standards', () => {
     it('should provide examples of boundary/negative scenarios', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('Empty or missing required fields')
       expect(prompt).toContain('Invalid input formats')
       expect(prompt).toContain('Invalid credentials for login')
@@ -137,7 +137,7 @@ describe('Planner Prompt Quality Standards', () => {
     it('should include critical reminder for both case types', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('CRITICAL: For each key behavior (search, form, login, CRUD), generate BOTH happy path AND boundary/negative cases')
     })
   })
@@ -146,7 +146,7 @@ describe('Planner Prompt Quality Standards', () => {
     it('should require clear initial state in preconditions', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('**Clear Initial State (Preconditions):**')
       expect(prompt).toContain('Specify starting world state: logged in/out, cart empty/populated')
     })
@@ -154,7 +154,7 @@ describe('Planner Prompt Quality Standards', () => {
     it('should require template variables in preconditions', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('Use template variables for all URLs and credentials')
       expect(prompt).toContain('{{BASE_URL}}')
       expect(prompt).toContain('{{LOGIN_BASE_URL}}')
@@ -165,7 +165,7 @@ describe('Planner Prompt Quality Standards', () => {
     it('should require specific action verbs', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('**Executable Steps with Specific Actions:**')
       expect(prompt).toContain('Use action verbs: Navigate, Click, Fill, Select, Verify, Expect')
     })
@@ -173,7 +173,7 @@ describe('Planner Prompt Quality Standards', () => {
     it('should provide correct and wrong examples for navigation', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('CORRECT: "Navigate to {{BASE_URL}}/products/search"')
       expect(prompt).toContain('WRONG: "Go to search page" (too vague)')
     })
@@ -181,35 +181,19 @@ describe('Planner Prompt Quality Standards', () => {
     it('should provide correct and wrong examples for interactions', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('CORRECT: "Fill the \'Search\' input field with \'laptop\'"')
       expect(prompt).toContain('WRONG: "Enter search term" (missing specifics)')
     })
-  })
 
-  describe('Verifiable success criteria', () => {
-    it('should require non-empty specific expectedResult', () => {
+    it('should emphasize explicit verification steps instead of Expected clauses', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
-      expect(prompt).toContain('**Verifiable Success Criteria (Expected Results):**')
-      expect(prompt).toContain('Each step MUST have a non-empty, specific expectedResult')
-    })
 
-    it('should provide correct examples for expected results', () => {
-      const options = createPlanAgentOptions()
-      const prompt = buildPlanPrompt(options)
-      
-      expect(prompt).toContain('CORRECT: "The search results show at least 1 product matching \'laptop\'"')
-      expect(prompt).toContain('CORRECT: "Error message \'Username is required\' appears below the username field"')
-    })
-
-    it('should provide wrong examples for expected results', () => {
-      const options = createPlanAgentOptions()
-      const prompt = buildPlanPrompt(options)
-      
-      expect(prompt).toContain('WRONG: "The page works correctly" (too vague)')
-      expect(prompt).toContain('WRONG: "User sees results" (not specific enough)')
+      // Verify that steps use explicit verification rather than Expected sub-clauses
+      expect(prompt).toContain('Verify')
+      // The JSON output format should not mention expectedResult
+      expect(prompt).not.toContain('expectedResult')
     })
   })
 
@@ -217,7 +201,7 @@ describe('Planner Prompt Quality Standards', () => {
     it('should require template variables for URLs', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('{{BASE_URL}}')
       expect(prompt).toContain('{{LOGIN_BASE_URL}}')
     })
@@ -225,7 +209,7 @@ describe('Planner Prompt Quality Standards', () => {
     it('should require template variables for credentials', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('{{USERNAME}}')
       expect(prompt).toContain('{{PASSWORD}}')
     })
@@ -233,7 +217,7 @@ describe('Planner Prompt Quality Standards', () => {
     it('should forbid actual credentials in test cases', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('Never include actual credentials in test cases')
     })
   })
@@ -242,14 +226,14 @@ describe('Planner Prompt Quality Standards', () => {
     it('should require strict JSON output', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('Respond with JSON in the following shape, and nothing else')
     })
 
     it('should specify JSON schema structure', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('"flows":')
       expect(prompt).toContain('"cases":')
       expect(prompt).toContain('"preconditions":')
@@ -259,8 +243,16 @@ describe('Planner Prompt Quality Standards', () => {
     it('should forbid commentary outside JSON', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('Do not include any commentary outside of the JSON structure')
+    })
+
+    it('should not include expectedResult in step schema', () => {
+      const options = createPlanAgentOptions()
+      const prompt = buildPlanPrompt(options)
+
+      // The JSON schema should only have description for steps
+      expect(prompt).not.toContain('expectedResult')
     })
   })
 
@@ -268,14 +260,14 @@ describe('Planner Prompt Quality Standards', () => {
     it('should include URL mapping section', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('URL Mapping and Template Variables')
     })
 
     it('should provide examples from explored pages when available', () => {
       const options = createPlanAgentOptions()
       const prompt = buildPlanPrompt(options)
-      
+
       expect(prompt).toContain('Examples from explored pages')
       expect(prompt).toContain('https://example.com/')
     })

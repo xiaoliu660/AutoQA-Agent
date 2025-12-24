@@ -245,10 +245,9 @@ export type TestCasePlan = {
   markdownPath: string
   /** High-level preconditions for this test case */
   preconditions?: string[]
-  /** Ordered steps with explicit expected results */
+  /** Ordered steps with explicit actions and verifications */
   steps?: Array<{
     description: string
-    expectedResult: string
   }>
   /**
    * Explicit flag indicating whether this test case requires login.

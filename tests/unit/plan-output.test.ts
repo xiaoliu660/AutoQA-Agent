@@ -203,7 +203,7 @@ describe('plan/output', () => {
   })
 
   describe('buildMarkdownForTestCase', () => {
-    it('should generate markdown with Preconditions and ordered Steps including Expected', () => {
+    it('should generate markdown with Preconditions and ordered Steps without Expected', () => {
       const testCase: TestCasePlan = {
         id: 'case-1',
         name: 'Login with valid credentials',
@@ -215,11 +215,12 @@ describe('plan/output', () => {
         steps: [
           {
             description: 'Open the login page',
-            expectedResult: 'Login form is visible',
           },
           {
             description: 'Fill username {{USERNAME}} and password {{PASSWORD}} and submit',
-            expectedResult: 'User is redirected to dashboard',
+          },
+          {
+            description: 'Verify user is redirected to dashboard',
           },
         ],
       }
@@ -233,9 +234,11 @@ describe('plan/output', () => {
       // Now includes login include step as step 1
       expect(markdown).toMatch(/1\. include: login/)
       expect(markdown).toMatch(/2\. Open the login page/)
-      expect(markdown).toMatch(/- Expected: Login form is visible/)
       expect(markdown).toMatch(/3\. Fill username \{\{USERNAME}} and password \{\{PASSWORD}} and submit/)
-      expect(markdown).toMatch(/- Expected: User is redirected to dashboard/)
+      expect(markdown).toMatch(/4\. Verify user is redirected to dashboard/)
+      // Should NOT contain Expected clauses
+      expect(markdown).not.toContain('- Expected:')
+      expect(markdown).not.toContain('Expected:')
     })
 
     it('should provide default preconditions and steps when missing', () => {
@@ -254,7 +257,8 @@ describe('plan/output', () => {
       expect(markdown).toContain('Base URL accessible: {{BASE_URL}}')
       expect(markdown).toContain('## Steps')
       expect(markdown).toContain('1. Navigate to {{BASE_URL}}/')
-      expect(markdown).toContain('Expected: The application home page loads successfully.')
+      // Should NOT contain Expected clauses (removed from generated specs)
+      expect(markdown).not.toContain('Expected:')
     })
   })
 
