@@ -978,6 +978,19 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
 
           logToolResult('wait', startTime, result as any, stepIndex, { ...meta, snapshot: snapshotMeta })
 
+          if (result.ok && irRecorder.isEnabled()) {
+            await irRecorder.recordAction(
+              {
+                page: options.page,
+                toolName: 'wait' as IRToolName,
+                toolInput: { seconds: args.seconds },
+                stepIndex,
+              },
+              { ok: true },
+              null, // wait doesn't need element locator
+            )
+          }
+
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
           if (snapshotMeta.error) content.push({ type: 'text', text: `SNAPSHOT_FAILED: ${snapshotMeta.error}` })

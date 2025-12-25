@@ -212,7 +212,7 @@ The generated test cases MUST be executable by the AutoQA runner. Follow these r
 - For each test case, you MUST include a boolean field "requiresLogin" in the JSON output.
 - Set "requiresLogin": true when the primary page(s) or actions under test require the user to be logged in or authenticated.
 - Set "requiresLogin": false when the test case can be executed while logged out or as an anonymous user.
-- This flag controls whether the markdown generator will automatically insert an include step (for example: "include: login" or "include: <plan.loginStepsSpec>") at the beginning of the Steps section.
+- DO NOT manually add "include: login" or any include step to the steps array - the markdown generator will automatically insert it based on this flag.
 
 ## 4. Output Format
 
