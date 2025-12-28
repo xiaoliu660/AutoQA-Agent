@@ -1,12 +1,11 @@
 # AutoQA-Agent
 
+[![GitHub Repo stars](https://img.shields.io/github/stars/terryso/autoqa-agent?style=flat-square)](https://github.com/terryso/autoqa-agent/stargazers)
 [![NPM Version](https://img.shields.io/npm/v/autoqa-agent?style=flat-square)](https://www.npmjs.com/package/autoqa-agent)
 [![NPM Downloads](https://img.shields.io/npm/dm/autoqa-agent?style=flat-square)](https://www.npmjs.com/package/autoqa-agent)
-[![GitHub Repo stars](https://img.shields.io/github/stars/terryso/autoqa-agent?style=flat-square)](https://github.com/terryso/autoqa-agent/stargazers)
-[![GitHub last commit](https://img.shields.io/github/last-commit/terryso/autoqa-agent?style=flat-square)](https://github.com/terryso/autoqa-agent/commits)
 [![License](https://img.shields.io/github/license/terryso/autoqa-agent?style=flat-square)](https://github.com/terryso/autoqa-agent)
-[![Node >= 20](https://img.shields.io/badge/node-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![DeepWiki](https://img.shields.io/badge/DeepWiki-AutoQA--Agent-blue?style=flat-square)](https://deepwiki.com/terryso/AutoQA-Agent)
+[![WeChat](https://img.shields.io/badge/WeChat-Group-green?style=flat-square&logo=wechat&logoColor=white)](https://d.doloo.top/uaaafvhl/sPQViF)
 
 **[English](README.md) | [中文](README.zh.md)**
 
